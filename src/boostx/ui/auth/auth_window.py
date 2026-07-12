@@ -16,7 +16,7 @@ class AuthWindow(FramelessWindowMixin, QWidget):
     def __init__(self, session_manager: SessionManager) -> None:
         super().__init__()
         self.setObjectName("AuthWindowRoot")
-        self.setWindowTitle("BoostX")
+        self.setWindowTitle("Nexora")
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -24,7 +24,7 @@ class AuthWindow(FramelessWindowMixin, QWidget):
         self.resize(_MIN_WIDTH, _MIN_HEIGHT)
         self.init_frameless()
 
-        self._title_bar = TitleBar("BoostX", self)
+        self._title_bar = TitleBar("Nexora", self)
         self._auth_stack = AuthStack(session_manager, self)
         self._auth_stack.authenticated.connect(self.authenticated.emit)
 

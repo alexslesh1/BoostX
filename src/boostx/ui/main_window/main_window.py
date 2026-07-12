@@ -30,7 +30,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         super().__init__()
         self._session_manager = session_manager
         self.setObjectName("MainWindowRoot")
-        self.setWindowTitle("BoostX")
+        self.setWindowTitle("Nexora")
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -44,7 +44,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_service = BoostService(self._boost_repository)
         self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
 
-        self._title_bar = TitleBar("BoostX", self)
+        self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
             "Offline — showing cached data. Changes will sync when reconnected.", self
         )
