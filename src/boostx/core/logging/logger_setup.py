@@ -9,7 +9,7 @@ def configure_logging() -> None:
     logger.remove()
     logger.add(sys.stderr, level="INFO", colorize=True)
     logger.add(
-        AppPaths.logs_dir() / "boostx_{time:YYYY-MM-DD}.log",
+        AppPaths.logs_dir() / "nexora_{time:YYYY-MM-DD}.log",
         rotation="10 MB",
         retention="7 days",
         level="DEBUG",

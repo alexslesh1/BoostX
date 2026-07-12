@@ -1,4 +1,5 @@
 import json
+import os
 import platform
 from pathlib import Path, PureWindowsPath
 
@@ -47,4 +48,7 @@ class RiotDetector(GameDetector):
     def _installs_path() -> Path | None:
         if platform.system() != "Windows":
             return None
-        return Path("C:/ProgramData/Riot Games/RiotClientInstalls.json")
+        program_data = os.environ.get("PROGRAMDATA")
+        if not program_data:
+            return None
+        return Path(program_data) / "Riot Games" / "RiotClientInstalls.json"
