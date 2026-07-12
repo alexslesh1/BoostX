@@ -19,9 +19,13 @@ from boostx.core.services.boost.boost_app_status import BoostAppStatus
 from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.boost.catalog import BOOST_CATALOG, BoostCatalogEntry
 from boostx.core.services.boost.icon_resolver import build_icon_index, resolve_icon_path
+from boostx.core.services.discord_boost.discord_launcher import find_discord_executable
+from boostx.core.services.telegram_boost.telegram_launcher import find_telegram_executable
 from boostx.ui.components.boost_app_card import SLOT_SIZE, BoostAppCard
 from boostx.ui.components.boost_screen import BoostScreen
+from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
+from boostx.ui.controllers.telegram_boost_controller import TelegramBoostController
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.pages.base_page import BasePage
 
@@ -34,11 +38,21 @@ class BoostPage(BasePage):
         self,
         service: BoostService,
         sequence_controller: BoostSequenceController,
+        boost_discord_controller: BoostDiscordController,
+        telegram_boost_controller: TelegramBoostController,
         parent: QWidget | None = None,
     ) -> None:
         # Must be assigned before super().__init__(), since it triggers _build_body() synchronously.
         self._service = service
         self._sequence_controller = sequence_controller
+        self._communication_controllers = {
+            "discord": boost_discord_controller,
+            "telegram": telegram_boost_controller,
+        }
+        self._communication_finders = {
+            "discord": find_discord_executable,
+            "telegram": find_telegram_executable,
+        }
         self._cards: dict[str, BoostAppCard] = {}
         self._slots: dict[str, QWidget] = {}
         self._current_app_key: str | None = None
@@ -55,6 +69,10 @@ class BoostPage(BasePage):
         self._sequence_controller.step_started.connect(self._on_step_started)
         self._sequence_controller.sequence_failed.connect(self._on_sequence_failed)
         self._sequence_controller.sequence_finished.connect(self._on_sequence_finished)
+
+        for controller in self._communication_controllers.values():
+            controller.started.connect(self._on_communication_started)
+            controller.failed.connect(self._on_communication_failed)
 
     def _build_body(self, layout: QVBoxLayout) -> None:
         toolbar = QHBoxLayout()
@@ -146,6 +164,9 @@ class BoostPage(BasePage):
 
     def _on_card_clicked(self, app_key: str) -> None:
         entry = self._entry_for_key(app_key)
+        if entry.is_communication_app:
+            self._start_communication_boost(entry)
+            return
         status = self._service.get_status(app_key)
         if status is not None and status.installed and status.executable_path:
             self._current_app_key = app_key
@@ -156,6 +177,46 @@ class BoostPage(BasePage):
             self._sequence_controller.run(app_key)
         else:
             self._show_locate_prompt(entry, status)
+
+    def _start_communication_boost(self, entry: BoostCatalogEntry) -> None:
+        executable_path = self._communication_finders[entry.key]()
+        if executable_path is None:
+            box = QMessageBox(self)
+            box.setWindowTitle(f"{entry.display_name} not found")
+            box.setText(f"{entry.display_name} installation not found. Please install it first.")
+            box.exec()
+            return
+
+        status = BoostAppStatus(
+            app_key=entry.key,
+            installed=True,
+            executable_path=str(executable_path),
+            install_dir=str(executable_path.parent),
+            source="detected",
+            launch_count=0,
+            last_launch_at=None,
+            custom_settings=None,
+        )
+
+        self._current_app_key = entry.key
+        self._last_failure_message = ""
+        icon_path = resolve_icon_path(entry.display_name, self._icon_index)
+        self._boost_screen.start(entry, status, icon_path)
+        self._stack.setCurrentIndex(1)
+
+        controller = self._communication_controllers[entry.key]
+        if controller.is_active:
+            self._boost_screen.on_sequence_finished(True)
+        else:
+            self._boost_screen.on_step_started("launch")
+            controller.start()
+
+    def _on_communication_started(self) -> None:
+        self._boost_screen.on_sequence_finished(True)
+
+    def _on_communication_failed(self, message: str) -> None:
+        self._last_failure_message = message
+        self._boost_screen.on_sequence_failed(message)
 
     def _show_locate_prompt(self, entry: BoostCatalogEntry, status: BoostAppStatus | None) -> None:
         if status is not None and status.installed and not status.executable_path:
@@ -198,6 +259,9 @@ class BoostPage(BasePage):
         self._stack.setCurrentIndex(0)
 
     def _on_stop_requested(self) -> None:
+        controller = self._communication_controllers.get(self._current_app_key or "")
+        if controller is not None:
+            controller.stop()
         self._boost_screen.stop()
         self._stack.setCurrentIndex(0)
         self._refresh_cards()

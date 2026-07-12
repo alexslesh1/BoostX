@@ -126,16 +126,16 @@ class BoostScreen(QWidget):
         self._average_fps_card = AverageFPSCard(self)
         self._cpu_usage_card = CPUUsageCard(self)
 
-        stats_grid = QGridLayout()
-        stats_grid.setHorizontalSpacing(10)
-        stats_grid.setVerticalSpacing(10)
+        self._stats_grid = QGridLayout()
+        self._stats_grid.setHorizontalSpacing(10)
+        self._stats_grid.setVerticalSpacing(10)
         for column in range(_STATS_COLUMNS):
-            stats_grid.setColumnStretch(column, 1)
-        stats_grid.addWidget(self._packet_loss_card, 0, 0)
-        stats_grid.addWidget(self._session_time_card, 0, 1)
-        stats_grid.addWidget(self._average_fps_card, 1, 0)
-        stats_grid.addWidget(self._cpu_usage_card, 1, 1)
-        stats_grid.addWidget(self._power_plan_card, 2, 0, 1, _STATS_COLUMNS)
+            self._stats_grid.setColumnStretch(column, 1)
+        self._stats_grid.addWidget(self._packet_loss_card, 0, 0)
+        self._stats_grid.addWidget(self._session_time_card, 0, 1)
+        self._stats_grid.addWidget(self._average_fps_card, 1, 0)
+        self._stats_grid.addWidget(self._cpu_usage_card, 1, 1)
+        self._stats_grid.addWidget(self._power_plan_card, 2, 0, 1, _STATS_COLUMNS)
 
         right_column = QVBoxLayout()
         right_column.setSpacing(4)
@@ -146,7 +146,7 @@ class BoostScreen(QWidget):
         right_column.addSpacing(10)
         right_column.addWidget(self._ping_widget, stretch=1)
         right_column.addSpacing(10)
-        right_column.addLayout(stats_grid)
+        right_column.addLayout(self._stats_grid)
         return right_column
 
     def start(self, entry: BoostCatalogEntry, status: BoostAppStatus, icon_path: Path | None) -> None:
@@ -155,6 +155,8 @@ class BoostScreen(QWidget):
         self._installed_chip.setText("Installed" if status.installed else "Not Installed")
         self._installed_chip.set_severity("success" if status.installed else "neutral")
         self._launcher_label.setText(f"Launcher: {(status.source or 'Manual').title()}")
+
+        self._apply_stats_layout(reduced=entry.is_communication_app)
 
         self._set_status(_PREPARING_TEXT, "neutral", pulsing=True)
         self._ping_widget.reset()
@@ -169,6 +171,21 @@ class BoostScreen(QWidget):
 
         self._metrics.start()
         self._timer.start()
+
+    def _apply_stats_layout(self, *, reduced: bool) -> None:
+        for card in (
+            self._session_time_card,
+            self._average_fps_card,
+            self._cpu_usage_card,
+            self._power_plan_card,
+        ):
+            card.setVisible(not reduced)
+
+        self._stats_grid.removeWidget(self._packet_loss_card)
+        if reduced:
+            self._stats_grid.addWidget(self._packet_loss_card, 0, 0, 1, _STATS_COLUMNS)
+        else:
+            self._stats_grid.addWidget(self._packet_loss_card, 0, 0)
 
     def stop(self) -> None:
         self._timer.stop()

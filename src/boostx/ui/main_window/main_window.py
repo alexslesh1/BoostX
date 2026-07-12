@@ -13,6 +13,7 @@ from boostx.ui.components.title_bar.title_bar import TitleBar
 from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
 from boostx.ui.controllers.monitor_controller import MonitorController
+from boostx.ui.controllers.telegram_boost_controller import TelegramBoostController
 from boostx.ui.main_window.frameless_mixin import FramelessWindowMixin
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.navigation.page_router import PageRouter
@@ -46,6 +47,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_service = BoostService(self._boost_repository)
         self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
         self._boost_discord_controller = BoostDiscordController(self._session_manager, parent=self)
+        self._telegram_boost_controller = TelegramBoostController(self._session_manager, parent=self)
 
         self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
@@ -66,9 +68,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._monitor_controller.start()
 
     def _register_pages(self) -> None:
-        dashboard_page = DashboardPage(
-            self._monitor_controller, self._boost_service, self._boost_discord_controller, self._stack
-        )
+        dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
         dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
@@ -78,7 +78,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         pages = {
             0: dashboard_page,
             1: MonitorPage(self._monitor_controller, self._stack),
-            2: BoostPage(self._boost_service, self._boost_sequence_controller, self._stack),
+            2: BoostPage(
+                self._boost_service,
+                self._boost_sequence_controller,
+                self._boost_discord_controller,
+                self._telegram_boost_controller,
+                self._stack,
+            ),
             3: self._cleaner_page,
             4: self._tweaks_page,
             5: SettingsPage(self._boost_service, self._stack),
@@ -125,6 +131,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
         self._boost_discord_controller.shutdown()
+        self._telegram_boost_controller.shutdown()
         self._cleaner_page.shutdown()
         self._tweaks_page.shutdown()
         self._boost_repository.close()
