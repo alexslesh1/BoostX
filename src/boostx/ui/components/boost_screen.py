@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -27,7 +26,7 @@ from boostx.ui.components.card import Card
 from boostx.ui.components.monogram import render_monogram_pixmap
 from boostx.ui.components.status_chip import StatusChip
 
-COVER_SIZE = QSize(220, 391)
+COVER_SIZE = QSize(168, 299)
 _METRICS_INTERVAL_MS = 1000
 _PREPARING_TEXT = "Preparing Boost..."
 _LAUNCHING_TEXT = "Launching..."
@@ -59,25 +58,19 @@ class BoostScreen(QWidget):
         back_row.addStretch(1)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(32)
+        top_row.setSpacing(28)
         top_row.addLayout(self._build_left_column(), stretch=0)
         top_row.addLayout(self._build_right_column(), stretch=1)
 
         card = Card(self)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(28, 24, 28, 24)
+        card_layout.setContentsMargins(20, 18, 20, 18)
         card_layout.addLayout(top_row)
 
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidget(card)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-
         outer_layout = QVBoxLayout(self)
-        outer_layout.setSpacing(16)
+        outer_layout.setSpacing(10)
         outer_layout.addLayout(back_row)
-        outer_layout.addWidget(scroll_area, stretch=1)
+        outer_layout.addWidget(card, stretch=1)
 
         self._timer = QTimer(self)
         self._timer.setInterval(_METRICS_INTERVAL_MS)
@@ -97,7 +90,7 @@ class BoostScreen(QWidget):
         self._launcher_label.setObjectName("SecondaryPathLabel")
 
         left_column = QVBoxLayout()
-        left_column.setSpacing(10)
+        left_column.setSpacing(8)
         left_column.addWidget(self._cover_label)
         left_column.addWidget(self._name_label)
         left_column.addWidget(self._installed_chip, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -134,8 +127,8 @@ class BoostScreen(QWidget):
         self._cpu_usage_card = CPUUsageCard(self)
 
         stats_grid = QGridLayout()
-        stats_grid.setHorizontalSpacing(16)
-        stats_grid.setVerticalSpacing(16)
+        stats_grid.setHorizontalSpacing(10)
+        stats_grid.setVerticalSpacing(10)
         for column in range(_STATS_COLUMNS):
             stats_grid.setColumnStretch(column, 1)
         stats_grid.addWidget(self._packet_loss_card, 0, 0)
@@ -145,16 +138,15 @@ class BoostScreen(QWidget):
         stats_grid.addWidget(self._cpu_usage_card, 2, 1)
 
         right_column = QVBoxLayout()
-        right_column.setSpacing(6)
+        right_column.setSpacing(4)
         right_column.addWidget(status_heading)
         right_column.addLayout(status_row)
-        right_column.addSpacing(6)
+        right_column.addSpacing(4)
         right_column.addWidget(stop_button, alignment=Qt.AlignmentFlag.AlignLeft)
-        right_column.addSpacing(20)
-        right_column.addWidget(self._ping_widget)
-        right_column.addSpacing(16)
+        right_column.addSpacing(10)
+        right_column.addWidget(self._ping_widget, stretch=1)
+        right_column.addSpacing(10)
         right_column.addLayout(stats_grid)
-        right_column.addStretch(1)
         return right_column
 
     def start(self, entry: BoostCatalogEntry, status: BoostAppStatus, icon_path: Path | None) -> None:

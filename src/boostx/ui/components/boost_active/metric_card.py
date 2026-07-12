@@ -28,11 +28,10 @@ class MetricCard(Card):
         self._fade_animation.setDuration(_FADE_DURATION_MS)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(6)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(4)
         layout.addWidget(label)
         layout.addWidget(self._value_label)
-        layout.addStretch(1)
 
     def set_severity(self, severity: str) -> None:
         self._value_label.setProperty("severity", severity)

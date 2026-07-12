@@ -8,8 +8,8 @@ from boostx.ui.components.card import Card
 from boostx.ui.components.charts.rolling_series_buffer import RollingSeriesBuffer
 
 _HISTORY_POINTS = 60
-_MIN_CHART_HEIGHT = 130
-_MIN_WIDGET_HEIGHT = 300
+_MIN_CHART_HEIGHT = 80
+_MIN_WIDGET_HEIGHT = 150
 _FADE_DURATION_MS = 250
 _FADE_START_OPACITY = 0.35
 
@@ -42,11 +42,11 @@ class PingWidget(Card):
         self._chart_view = self._build_chart(palette)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 24, 28, 20)
-        layout.setSpacing(2)
+        layout.setContentsMargins(24, 14, 24, 12)
+        layout.setSpacing(0)
         layout.addWidget(title_label)
         layout.addWidget(self._value_label)
-        layout.addSpacing(14)
+        layout.addSpacing(8)
         layout.addWidget(self._chart_view, stretch=1)
 
     def _build_chart(self, palette: Palette) -> QChartView:
