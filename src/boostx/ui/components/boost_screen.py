@@ -133,9 +133,9 @@ class BoostScreen(QWidget):
             stats_grid.setColumnStretch(column, 1)
         stats_grid.addWidget(self._packet_loss_card, 0, 0)
         stats_grid.addWidget(self._session_time_card, 0, 1)
-        stats_grid.addWidget(self._power_plan_card, 1, 0, 1, _STATS_COLUMNS)
-        stats_grid.addWidget(self._average_fps_card, 2, 0)
-        stats_grid.addWidget(self._cpu_usage_card, 2, 1)
+        stats_grid.addWidget(self._average_fps_card, 1, 0)
+        stats_grid.addWidget(self._cpu_usage_card, 1, 1)
+        stats_grid.addWidget(self._power_plan_card, 2, 0, 1, _STATS_COLUMNS)
 
         right_column = QVBoxLayout()
         right_column.setSpacing(4)

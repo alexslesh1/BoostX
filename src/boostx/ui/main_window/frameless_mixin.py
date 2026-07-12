@@ -1,7 +1,7 @@
 from enum import IntFlag, auto
 
-from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QPoint, QRect, QRectF, Qt
+from PySide6.QtGui import QMouseEvent, QPainterPath, QRegion, QResizeEvent
 
 from boostx.config.layout import LayoutConstants
 
@@ -30,10 +30,25 @@ class FramelessWindowMixin:
     def init_frameless(self) -> None:
         self.setMouseTracking(True)
         self._resize_margin = LayoutConstants().RESIZE_MARGIN
+        self._corner_radius = LayoutConstants().WINDOW_BORDER_RADIUS
         self._resize_edge = ResizeEdge.NONE
         self._is_resizing = False
         self._resize_start_geometry = QRect()
         self._resize_start_mouse = QPoint()
+        self._update_window_mask()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._update_window_mask()
+
+    def _update_window_mask(self) -> None:
+        # QSS border-radius only paints this widget's own background; child
+        # widgets (title bar, sidebar, content) are opaque rectangles that
+        # would otherwise cover the rounded corners. Masking the whole
+        # top-level window clips everything to the rounded shape.
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), self._corner_radius, self._corner_radius)
+        self.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
     def _edge_at(self, pos: QPoint) -> ResizeEdge:
         edge = ResizeEdge.NONE

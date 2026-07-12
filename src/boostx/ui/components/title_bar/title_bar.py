@@ -1,3 +1,5 @@
+import math
+
 from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
@@ -5,6 +7,19 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 from boostx.config.layout import LayoutConstants
 from boostx.config.paths import AppPaths
 from boostx.ui.components.title_bar.window_control_button import WindowControlButton
+
+_CONTROLS_SAFETY_MARGIN = 8
+
+
+def _safe_right_inset(layout_constants: LayoutConstants) -> int:
+    """Extra right margin so the window control buttons clear the rounded
+    window mask (see FramelessWindowMixin) instead of being clipped by it
+    when WINDOW_BORDER_RADIUS is large relative to the title bar height."""
+    radius = layout_constants.WINDOW_BORDER_RADIUS
+    top_y = layout_constants.RESIZE_MARGIN
+    if top_y >= radius:
+        return 0
+    return radius - int(math.sqrt(radius**2 - (radius - top_y) ** 2)) + _CONTROLS_SAFETY_MARGIN
 
 
 class TitleBar(QWidget):
@@ -17,7 +32,8 @@ class TitleBar(QWidget):
         super().__init__(parent)
         self.setObjectName("TitleBar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedHeight(LayoutConstants().TITLEBAR_HEIGHT)
+        layout_constants = LayoutConstants()
+        self.setFixedHeight(layout_constants.TITLEBAR_HEIGHT)
 
         self._drag_last_pos: QPoint | None = None
 
@@ -35,7 +51,7 @@ class TitleBar(QWidget):
         self._close_button.clicked.connect(self.close_requested.emit)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 0, 0)
+        layout.setContentsMargins(16, 0, _safe_right_inset(layout_constants), 0)
         layout.setSpacing(0)
         layout.addWidget(self._title_label)
         layout.addStretch(1)

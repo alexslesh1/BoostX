@@ -10,6 +10,7 @@ class LayoutConstants:
     RESIZE_MARGIN: int = 6
     BORDER_RADIUS: int = 10
     BORDER_RADIUS_SMALL: int = 6
+    WINDOW_BORDER_RADIUS: int = 128
 
     def as_qss_tokens(self) -> dict[str, str]:
         return {
@@ -17,4 +18,5 @@ class LayoutConstants:
             "TITLEBAR_HEIGHT": str(self.TITLEBAR_HEIGHT),
             "RADIUS": str(self.BORDER_RADIUS),
             "RADIUS_SMALL": str(self.BORDER_RADIUS_SMALL),
+            "WINDOW_RADIUS": str(self.WINDOW_BORDER_RADIUS),
         }

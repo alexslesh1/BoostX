@@ -1,14 +1,13 @@
 from PySide6.QtCharts import QAreaSeries, QChart, QChartView, QSplineSeries, QValueAxis
 from PySide6.QtCore import QMargins, QPointF, QPropertyAnimation, Qt
 from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPen
-from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QGridLayout, QLabel, QVBoxLayout, QWidget
 
 from boostx.config.palette import Palette
 from boostx.ui.components.card import Card
 from boostx.ui.components.charts.rolling_series_buffer import RollingSeriesBuffer
 
 _HISTORY_POINTS = 60
-_MIN_CHART_HEIGHT = 80
 _MIN_WIDGET_HEIGHT = 150
 _FADE_DURATION_MS = 250
 _FADE_START_OPACITY = 0.35
@@ -16,19 +15,36 @@ _FADE_START_OPACITY = 0.35
 
 class PingWidget(Card):
     """The dominant widget on the Boost Active screen: a large ping
-    readout with a smooth animated latency graph filling the space
-    beneath it."""
+    readout layered on top of a smooth animated latency graph that
+    fills the whole card behind it."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setMinimumHeight(_MIN_WIDGET_HEIGHT)
         palette = Palette()
 
-        title_label = QLabel("PING", self)
+        self._buffer = RollingSeriesBuffer(_HISTORY_POINTS)
+        self._chart_view = self._build_chart(palette)
+
+        # The chart fills the whole card; the header is stacked in the same grid
+        # cell and raised above it so the ping value always reads clearly on top
+        # of the graph instead of being laid out above/below it.
+        layout = QGridLayout(self)
+        layout.setContentsMargins(24, 14, 24, 12)
+        layout.addWidget(self._chart_view, 0, 0)
+
+        header = self._build_header()
+        layout.addWidget(header, 0, 0)
+        header.raise_()
+
+    def _build_header(self) -> QWidget:
+        header = QWidget(self)
+
+        title_label = QLabel("PING", header)
         title_label.setObjectName("PingTitleLabel")
         title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        self._value_label = QLabel("— ms", self)
+        self._value_label = QLabel("— ms", header)
         self._value_label.setObjectName("PingValueLabel")
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
@@ -38,16 +54,13 @@ class PingWidget(Card):
         self._fade_animation = QPropertyAnimation(self._opacity_effect, b"opacity", self)
         self._fade_animation.setDuration(_FADE_DURATION_MS)
 
-        self._buffer = RollingSeriesBuffer(_HISTORY_POINTS)
-        self._chart_view = self._build_chart(palette)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 14, 24, 12)
-        layout.setSpacing(0)
-        layout.addWidget(title_label)
-        layout.addWidget(self._value_label)
-        layout.addSpacing(8)
-        layout.addWidget(self._chart_view, stretch=1)
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(self._value_label)
+        header_layout.addStretch(1)
+        return header
 
     def _build_chart(self, palette: Palette) -> QChartView:
         chart = QChart()
@@ -91,7 +104,6 @@ class PingWidget(Card):
 
         chart_view = QChartView(chart, self)
         chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        chart_view.setMinimumHeight(_MIN_CHART_HEIGHT)
         chart_view.setStyleSheet("background: transparent; border: none;")
         return chart_view
 
