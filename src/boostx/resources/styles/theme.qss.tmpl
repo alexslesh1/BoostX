@@ -293,20 +293,59 @@ QPushButton#BoostScreenBackButton:hover {
     color: ${TEXT};
 }
 
-QLabel#BoostScreenStatusLabel {
+QLabel#BoostActiveStatusLabel {
     color: ${TEXT};
-    font-size: ${SIZE_DISPLAY}px;
+    font-size: ${SIZE_SUBHEADING}px;
     font-weight: 700;
 }
 
-QLabel#BoostScreenStatRow {
-    color: ${TEXT_SECONDARY};
-    font-size: ${SIZE_BODY}px;
+QLabel#BoostActiveStatusLabel[severity="success"] {
+    color: ${SUCCESS};
 }
 
-QFrame#BoostScreenDivider {
-    background-color: ${BORDER};
-    border: none;
+QLabel#BoostActiveStatusLabel[severity="error"] {
+    color: ${ERROR};
+}
+
+QLabel#BoostActiveStatusLabel[severity="neutral"] {
+    color: ${TEXT_SECONDARY};
+}
+
+QLabel#PingTitleLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+QLabel#PingValueLabel {
+    color: ${TEXT};
+    font-size: ${SIZE_JUMBO}px;
+    font-weight: 800;
+}
+
+QLabel#MetricCardLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+}
+
+QLabel#MetricCardValue {
+    color: ${TEXT};
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 700;
+}
+
+QLabel#MetricCardValue[severity="success"] {
+    color: ${SUCCESS};
+}
+
+QLabel#MetricCardValue[severity="warning"] {
+    color: ${WARNING};
+}
+
+QLabel#MetricCardValue[severity="error"] {
+    color: ${ERROR};
 }
 
 QPushButton#BoostStopButton {

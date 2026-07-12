@@ -1,11 +1,8 @@
-import random
-import time
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -15,24 +12,33 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from boostx.config.palette import Palette
 from boostx.core.services.boost.boost_app_status import BoostAppStatus
+from boostx.core.services.boost.boost_metrics import BoostMetricsProvider
 from boostx.core.services.boost.catalog import BoostCatalogEntry
+from boostx.ui.components.boost_active.average_fps_card import AverageFPSCard
+from boostx.ui.components.boost_active.cpu_usage_card import CPUUsageCard
+from boostx.ui.components.boost_active.packet_loss_card import PacketLossCard
+from boostx.ui.components.boost_active.ping_widget import PingWidget
+from boostx.ui.components.boost_active.power_plan_card import PowerPlanCard
+from boostx.ui.components.boost_active.pulse_dot import PulseDot
+from boostx.ui.components.boost_active.session_time_card import SessionTimeCard
 from boostx.ui.components.card import Card
 from boostx.ui.components.monogram import render_monogram_pixmap
 from boostx.ui.components.status_chip import StatusChip
 
 COVER_SIZE = QSize(220, 391)
-_UPDATE_INTERVAL_MS = 1000
+_METRICS_INTERVAL_MS = 1000
 _PREPARING_TEXT = "Preparing Boost..."
 _LAUNCHING_TEXT = "Launching..."
 _ACTIVE_TEXT = "Boost Active"
+_STATS_COLUMNS = 2
 
-
-def _divider() -> QFrame:
-    line = QFrame()
-    line.setObjectName("BoostScreenDivider")
-    line.setFixedHeight(1)
-    return line
+_SEVERITY_PALETTE_ATTR = {
+    "success": "SUCCESS",
+    "error": "ERROR",
+    "neutral": "TEXT_SECONDARY",
+}
 
 
 class BoostScreen(QWidget):
@@ -41,7 +47,8 @@ class BoostScreen(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._start_time = 0.0
+        self._palette = Palette()
+        self._metrics = BoostMetricsProvider()
 
         back_button = QPushButton("← Back", self)
         back_button.setObjectName("BoostScreenBackButton")
@@ -51,6 +58,32 @@ class BoostScreen(QWidget):
         back_row.addWidget(back_button)
         back_row.addStretch(1)
 
+        top_row = QHBoxLayout()
+        top_row.setSpacing(32)
+        top_row.addLayout(self._build_left_column(), stretch=0)
+        top_row.addLayout(self._build_right_column(), stretch=1)
+
+        card = Card(self)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(28, 24, 28, 24)
+        card_layout.addLayout(top_row)
+
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidget(card)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setSpacing(16)
+        outer_layout.addLayout(back_row)
+        outer_layout.addWidget(scroll_area, stretch=1)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(_METRICS_INTERVAL_MS)
+        self._timer.timeout.connect(self._on_metrics_tick)
+
+    def _build_left_column(self) -> QVBoxLayout:
         self._cover_label = QLabel(self)
         self._cover_label.setFixedSize(COVER_SIZE)
         self._cover_label.setScaledContents(True)
@@ -70,87 +103,59 @@ class BoostScreen(QWidget):
         left_column.addWidget(self._installed_chip, alignment=Qt.AlignmentFlag.AlignLeft)
         left_column.addWidget(self._launcher_label)
         left_column.addStretch(1)
+        return left_column
 
+    def _build_right_column(self) -> QVBoxLayout:
         status_heading = QLabel("BOOST STATUS", self)
         status_heading.setObjectName("SecondaryPathLabel")
+
+        self._status_dot = PulseDot(10, self)
         self._status_label = QLabel(_PREPARING_TEXT, self)
-        self._status_label.setObjectName("BoostScreenStatusLabel")
+        self._status_label.setObjectName("BoostActiveStatusLabel")
         self._status_label.setWordWrap(True)
 
-        right_column = QVBoxLayout()
-        right_column.setSpacing(6)
-        right_column.addWidget(status_heading)
-        right_column.addWidget(self._status_label)
-        right_column.addStretch(1)
-
-        top_row = QHBoxLayout()
-        top_row.setSpacing(32)
-        top_row.addLayout(left_column, stretch=0)
-        top_row.addLayout(right_column, stretch=1)
-
-        self._stat_labels: dict[str, QLabel] = {}
-        stats_grid = QGridLayout()
-        stats_grid.setHorizontalSpacing(24)
-        stats_grid.setVerticalSpacing(10)
-        for row, (key, title) in enumerate(
-            (
-                ("ping", "Current Ping"),
-                ("fps", "Average FPS"),
-                ("cpu", "CPU Usage"),
-                ("gpu", "GPU Usage"),
-                ("ram", "RAM Usage"),
-                ("cpu_temp", "CPU Temperature"),
-                ("gpu_temp", "GPU Temperature"),
-                ("session", "Session Time"),
-                ("power_plan", "Current Power Plan"),
-            )
-        ):
-            label = QLabel(title, self)
-            label.setObjectName("BoostScreenStatRow")
-            value = QLabel("—", self)
-            value.setObjectName("StatCardValue")
-            self._stat_labels[key] = value
-            stats_grid.addWidget(label, row, 0)
-            stats_grid.addWidget(value, row, 1)
-
-        boost_status_row_label = QLabel("Boost Status", self)
-        boost_status_row_label.setObjectName("BoostScreenStatRow")
-        self._boost_status_chip = StatusChip("Preparing", "neutral", self)
-        stats_grid.addWidget(boost_status_row_label, stats_grid.rowCount(), 0)
-        stats_grid.addWidget(self._boost_status_chip, stats_grid.rowCount() - 1, 1)
+        status_row = QHBoxLayout()
+        status_row.setSpacing(8)
+        status_row.addWidget(self._status_dot, alignment=Qt.AlignmentFlag.AlignVCenter)
+        status_row.addWidget(self._status_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        status_row.addStretch(1)
 
         stop_button = QPushButton("Stop Boost", self)
         stop_button.setObjectName("BoostStopButton")
         stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
         stop_button.clicked.connect(self._on_stop_clicked)
-        stop_row = QHBoxLayout()
-        stop_row.addStretch(1)
-        stop_row.addWidget(stop_button)
 
-        card = Card(self)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(28, 24, 28, 24)
-        card_layout.setSpacing(20)
-        card_layout.addLayout(top_row)
-        card_layout.addWidget(_divider())
-        card_layout.addLayout(stats_grid)
-        card_layout.addWidget(_divider())
-        card_layout.addLayout(stop_row)
+        self._ping_widget = PingWidget(self)
 
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidget(card)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._packet_loss_card = PacketLossCard(self)
+        self._session_time_card = SessionTimeCard(self)
+        self._power_plan_card = PowerPlanCard(self)
+        self._average_fps_card = AverageFPSCard(self)
+        self._cpu_usage_card = CPUUsageCard(self)
 
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setSpacing(16)
-        outer_layout.addLayout(back_row)
-        outer_layout.addWidget(scroll_area, stretch=1)
+        stats_grid = QGridLayout()
+        stats_grid.setHorizontalSpacing(16)
+        stats_grid.setVerticalSpacing(16)
+        for column in range(_STATS_COLUMNS):
+            stats_grid.setColumnStretch(column, 1)
+        stats_grid.addWidget(self._packet_loss_card, 0, 0)
+        stats_grid.addWidget(self._session_time_card, 0, 1)
+        stats_grid.addWidget(self._power_plan_card, 1, 0, 1, _STATS_COLUMNS)
+        stats_grid.addWidget(self._average_fps_card, 2, 0)
+        stats_grid.addWidget(self._cpu_usage_card, 2, 1)
 
-        self._timer = QTimer(self)
-        self._timer.setInterval(_UPDATE_INTERVAL_MS)
-        self._timer.timeout.connect(self._update_values)
+        right_column = QVBoxLayout()
+        right_column.setSpacing(6)
+        right_column.addWidget(status_heading)
+        right_column.addLayout(status_row)
+        right_column.addSpacing(6)
+        right_column.addWidget(stop_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        right_column.addSpacing(20)
+        right_column.addWidget(self._ping_widget)
+        right_column.addSpacing(16)
+        right_column.addLayout(stats_grid)
+        right_column.addStretch(1)
+        return right_column
 
     def start(self, entry: BoostCatalogEntry, status: BoostAppStatus, icon_path: Path | None) -> None:
         self._cover_label.setPixmap(self._load_cover(entry, icon_path))
@@ -159,33 +164,45 @@ class BoostScreen(QWidget):
         self._installed_chip.set_severity("success" if status.installed else "neutral")
         self._launcher_label.setText(f"Launcher: {(status.source or 'Manual').title()}")
 
-        self._status_label.setText(_PREPARING_TEXT)
-        self._boost_status_chip.setText("Preparing")
-        self._boost_status_chip.set_severity("neutral")
-        for label in self._stat_labels.values():
-            label.setText("—")
+        self._set_status(_PREPARING_TEXT, "neutral", pulsing=True)
+        self._ping_widget.reset()
+        for card in (
+            self._packet_loss_card,
+            self._session_time_card,
+            self._power_plan_card,
+            self._average_fps_card,
+            self._cpu_usage_card,
+        ):
+            card.reset()
 
-        self._start_time = time.monotonic()
+        self._metrics.start()
         self._timer.start()
 
     def stop(self) -> None:
         self._timer.stop()
 
     def on_step_started(self, step_key: str) -> None:
-        self._status_label.setText(_LAUNCHING_TEXT if step_key == "launch" else _PREPARING_TEXT)
+        text = _LAUNCHING_TEXT if step_key == "launch" else _PREPARING_TEXT
+        self._set_status(text, "neutral", pulsing=True)
 
     def on_sequence_failed(self, message: str) -> None:
-        self._status_label.setText(message or "Boost Failed")
-        self._boost_status_chip.setText("Failed")
-        self._boost_status_chip.set_severity("error")
+        self._set_status(message or "Boost Failed", "error", pulsing=False)
         self._timer.stop()
 
     def on_sequence_finished(self, success: bool) -> None:
         if not success:
             return
-        self._status_label.setText(_ACTIVE_TEXT)
-        self._boost_status_chip.setText("Active")
-        self._boost_status_chip.set_severity("success")
+        self._set_status(_ACTIVE_TEXT, "success", pulsing=True)
+
+    def _set_status(self, text: str, severity: str, *, pulsing: bool) -> None:
+        self._status_label.setText(text)
+        self._status_label.setProperty("severity", severity)
+        style = self._status_label.style()
+        style.unpolish(self._status_label)
+        style.polish(self._status_label)
+
+        self._status_dot.set_color(getattr(self._palette, _SEVERITY_PALETTE_ATTR[severity]))
+        self._status_dot.set_pulsing(pulsing)
 
     @staticmethod
     def _load_cover(entry: BoostCatalogEntry, icon_path: Path | None) -> QPixmap:
@@ -195,18 +212,14 @@ class BoostScreen(QWidget):
                 return pixmap
         return render_monogram_pixmap(entry.display_name, entry.key, COVER_SIZE)
 
-    def _update_values(self) -> None:
-        elapsed = int(time.monotonic() - self._start_time)
-        minutes, seconds = divmod(elapsed, 60)
-        self._stat_labels["ping"].setText(f"{random.randint(12, 45)} ms")
-        self._stat_labels["fps"].setText(f"{random.randint(90, 240)} FPS")
-        self._stat_labels["cpu"].setText(f"{random.randint(20, 70)}%")
-        self._stat_labels["gpu"].setText(f"{random.randint(40, 95)}%")
-        self._stat_labels["ram"].setText(f"{random.randint(30, 80)}%")
-        self._stat_labels["cpu_temp"].setText(f"{random.randint(45, 75)}°C")
-        self._stat_labels["gpu_temp"].setText(f"{random.randint(55, 85)}°C")
-        self._stat_labels["session"].setText(f"{minutes:02d}:{seconds:02d}")
-        self._stat_labels["power_plan"].setText("High Performance")
+    def _on_metrics_tick(self) -> None:
+        snapshot = self._metrics.sample()
+        self._ping_widget.update_ping(snapshot.ping_ms)
+        self._packet_loss_card.update_percent(snapshot.packet_loss_percent)
+        self._session_time_card.update_seconds(snapshot.session_seconds)
+        self._power_plan_card.update_plan(snapshot.power_plan)
+        self._average_fps_card.update_fps(snapshot.average_fps)
+        self._cpu_usage_card.update_percent(snapshot.cpu_usage_percent)
 
     def _on_back_clicked(self) -> None:
         self.back_requested.emit()
