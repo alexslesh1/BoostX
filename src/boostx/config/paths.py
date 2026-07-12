@@ -42,6 +42,16 @@ class AppPaths:
         return cls.resources_dir() / "styles"
 
     @classmethod
+    def scripts_dir(cls) -> Path:
+        return cls.resources_dir() / "scripts"
+
+    @classmethod
+    def catalog_dir(cls) -> Path:
+        """Bundled read-only reference data (e.g. CPU catalogs), distinct
+        from data_dir() which is the writable per-user data directory."""
+        return cls.resources_dir() / "data"
+
+    @classmethod
     def user_data_root(cls) -> Path:
         """OS-appropriate per-user application data directory.
 

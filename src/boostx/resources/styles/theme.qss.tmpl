@@ -540,3 +540,56 @@ QLabel#CleanerResultLabel {
     font-size: ${SIZE_SMALL}px;
     font-weight: 600;
 }
+
+QFrame#TweakProviderCard {
+    background-color: ${CARD};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS}px;
+}
+
+QFrame#TweakProviderCard:hover {
+    background-color: ${HOVER};
+    border-color: ${PRIMARY};
+}
+
+QLabel#TweakCardArrow {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_HEADING}px;
+    font-weight: 700;
+}
+
+QLabel#TweakResultTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_HEADING}px;
+    font-weight: 700;
+}
+
+QLabel#TweakResultTitle[severity="success"] {
+    color: ${SUCCESS};
+}
+
+QLabel#TweakResultTitle[severity="error"] {
+    color: ${ERROR};
+}
+
+QPushButton#TweakSecondaryButton {
+    background-color: ${HOVER};
+    color: ${TEXT};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 10px 22px;
+    font-weight: 700;
+}
+
+QPushButton#TweakSecondaryButton:hover {
+    border-color: ${PRIMARY};
+}
+
+QPlainTextEdit#TweakLogView {
+    background-color: ${HOVER};
+    color: ${TEXT_SECONDARY};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    font-family: monospace;
+    font-size: ${SIZE_SMALL}px;
+}

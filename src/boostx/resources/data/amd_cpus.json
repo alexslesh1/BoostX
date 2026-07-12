@@ -1,0 +1,12 @@
+[
+  {"key": "9950x3d", "label": "Ryzen 9 9950X3D"},
+  {"key": "9950x", "label": "Ryzen 9 9950X"},
+  {"key": "9900x", "label": "Ryzen 9 9900X"},
+  {"key": "9800x3d", "label": "Ryzen 7 9800X3D"},
+  {"key": "9700x", "label": "Ryzen 7 9700X"},
+  {"key": "9600x", "label": "Ryzen 5 9600X"},
+  {"key": "7950x3d", "label": "Ryzen 9 7950X3D"},
+  {"key": "7900x", "label": "Ryzen 9 7900X"},
+  {"key": "7800x3d", "label": "Ryzen 7 7800X3D"},
+  {"key": "7600x", "label": "Ryzen 5 7600X"}
+]

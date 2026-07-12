@@ -1,0 +1,11 @@
+[
+  {"key": "i9-14900k", "label": "Core i9-14900K"},
+  {"key": "core ultra 9 285k", "label": "Core Ultra 9 285K"},
+  {"key": "i7-14700k", "label": "Core i7-14700K"},
+  {"key": "core ultra 7 265k", "label": "Core Ultra 7 265K"},
+  {"key": "i5-14600k", "label": "Core i5-14600K"},
+  {"key": "core ultra 5 245k", "label": "Core Ultra 5 245K"},
+  {"key": "i9-13900k", "label": "Core i9-13900K"},
+  {"key": "i7-13700k", "label": "Core i7-13700K"},
+  {"key": "i5-13600k", "label": "Core i5-13600K"}
+]

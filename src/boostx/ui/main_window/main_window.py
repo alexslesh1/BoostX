@@ -23,6 +23,7 @@ from boostx.ui.pages.cleaner_page import CleanerPage
 from boostx.ui.pages.dashboard_page import DashboardPage
 from boostx.ui.pages.monitor_page import MonitorPage
 from boostx.ui.pages.settings_page import SettingsPage
+from boostx.ui.pages.tweaks_page import TweaksPage
 
 
 class MainWindow(FramelessWindowMixin, QWidget):
@@ -68,15 +69,17 @@ class MainWindow(FramelessWindowMixin, QWidget):
         dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
         self._cleaner_page = CleanerPage(self._stack)
+        self._tweaks_page = TweaksPage(self._stack)
 
         pages = {
             0: dashboard_page,
             1: MonitorPage(self._monitor_controller, self._stack),
             2: BoostPage(self._boost_service, self._boost_sequence_controller, self._stack),
             3: self._cleaner_page,
-            4: SettingsPage(self._boost_service, self._stack),
-            5: AccountPage(self._session_manager, self._stack),
-            6: AboutPage(self._stack),
+            4: self._tweaks_page,
+            5: SettingsPage(self._boost_service, self._stack),
+            6: AccountPage(self._session_manager, self._stack),
+            7: AboutPage(self._stack),
         }
         for index, page in pages.items():
             self._router.register_page(index, page)
@@ -118,5 +121,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
         self._cleaner_page.shutdown()
+        self._tweaks_page.shutdown()
         self._boost_repository.close()
         super().closeEvent(event)
