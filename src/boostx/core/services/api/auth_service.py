@@ -5,6 +5,7 @@ from boostx.core.services.api.models import (
     AuthTokens,
     DeviceInfo,
     DeviceRecord,
+    ProxyCredentials,
     SubscriptionInfo,
     UserProfile,
 )
@@ -118,6 +119,12 @@ class AuthService:
 
     def remove_device(self, access_token: str, device_id: str) -> None:
         self._client.request("DELETE", f"/devices/{device_id}", token=access_token)
+
+    def get_proxy_credentials(self, access_token: str) -> ProxyCredentials:
+        body = self._client.request("GET", "/proxy/credentials", token=access_token)
+        return ProxyCredentials(
+            host=body["host"], port=body["port"], login=body["login"], password=body["password"]
+        )
 
     def check_health(self) -> bool:
         try:

@@ -14,9 +14,11 @@ from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.boost.catalog import BOOST_CATALOG
 from boostx.core.services.boost.icon_resolver import build_icon_index, resolve_icon_path
 from boostx.core.services.monitor.system_snapshot import SystemSnapshot
+from boostx.ui.components.boost_discord_card import BoostDiscordCard
 from boostx.ui.components.card import Card
 from boostx.ui.components.connection_row import ConnectionRow
 from boostx.ui.components.stat_card import StatCard, severity_for_percent
+from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.monitor_controller import MonitorController
 from boostx.ui.pages.base_page import BasePage
 from boostx.ui.utils.formatting import format_bytes_per_sec, format_percent
@@ -31,11 +33,13 @@ class DashboardPage(BasePage):
         self,
         monitor_controller: MonitorController,
         boost_service: BoostService,
+        boost_discord_controller: BoostDiscordController,
         parent: QWidget | None = None,
     ) -> None:
         # Must be assigned before super().__init__(), since it triggers _build_body() synchronously.
         self._monitor_controller = monitor_controller
         self._boost_service = boost_service
+        self._boost_discord_controller = boost_discord_controller
         self._stat_cards: dict[str, StatCard] = {}
         self._last_ping_ms: float | None = None
         self._icon_index = build_icon_index(AppPaths.game_icons_dir())
@@ -88,6 +92,9 @@ class DashboardPage(BasePage):
         connections_layout.addLayout(self._connections_stack, stretch=1)
 
         layout.addWidget(connections_card, stretch=1)
+
+        layout.addSpacing(16)
+        layout.addWidget(BoostDiscordCard(self._boost_discord_controller, self))
 
     def _build_rows_view(self, parent: QWidget) -> QWidget:
         self._rows_container = QWidget(parent)

@@ -10,6 +10,7 @@ from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.monitor.system_monitor_service import SystemMonitorService
 from boostx.ui.components.sidebar.sidebar import Sidebar
 from boostx.ui.components.title_bar.title_bar import TitleBar
+from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
 from boostx.ui.controllers.monitor_controller import MonitorController
 from boostx.ui.main_window.frameless_mixin import FramelessWindowMixin
@@ -44,6 +45,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_repository = BoostRepository(AppPaths.data_dir() / "boost.db")
         self._boost_service = BoostService(self._boost_repository)
         self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
+        self._boost_discord_controller = BoostDiscordController(self._session_manager, parent=self)
 
         self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
@@ -64,7 +66,9 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._monitor_controller.start()
 
     def _register_pages(self) -> None:
-        dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
+        dashboard_page = DashboardPage(
+            self._monitor_controller, self._boost_service, self._boost_discord_controller, self._stack
+        )
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
         dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
@@ -120,6 +124,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
+        self._boost_discord_controller.shutdown()
         self._cleaner_page.shutdown()
         self._tweaks_page.shutdown()
         self._boost_repository.close()

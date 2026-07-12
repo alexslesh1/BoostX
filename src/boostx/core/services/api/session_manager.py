@@ -10,7 +10,13 @@ from boostx.core.services.api.api_worker import run_async
 from boostx.core.services.api.auth_service import AuthService
 from boostx.core.services.api.device_identity import get_device_info
 from boostx.core.services.api.exceptions import ApiConnectionError, ApiError
-from boostx.core.services.api.models import AuthTokens, DeviceRecord, SubscriptionInfo, UserProfile
+from boostx.core.services.api.models import (
+    AuthTokens,
+    DeviceRecord,
+    ProxyCredentials,
+    SubscriptionInfo,
+    UserProfile,
+)
 from boostx.core.services.api.profile_cache import ProfileCache
 from boostx.core.services.api.token_storage import TokenStorage
 
@@ -202,6 +208,12 @@ class SessionManager(QObject):
     def remove_device(self, device_id: str, on_success: OnSuccess, on_error: OnError) -> None:
         token = self._access_token
         run_async(lambda: self._auth_service.remove_device(token, device_id), lambda _: on_success(), on_error)
+
+    def get_proxy_credentials(
+        self, on_success: Callable[[ProxyCredentials], None], on_error: OnError
+    ) -> None:
+        token = self._access_token
+        run_async(lambda: self._auth_service.get_proxy_credentials(token), on_success, on_error)
 
     def shutdown(self) -> None:
         self._refresh_timer.stop()

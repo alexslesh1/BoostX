@@ -45,3 +45,11 @@ class AuthTokens:
     refresh_token: str
     token_type: str
     expires_in: int
+
+
+@dataclass(frozen=True)
+class ProxyCredentials:
+    host: str
+    port: int
+    login: str
+    password: str
