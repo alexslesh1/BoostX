@@ -1,0 +1,358 @@
+* {
+    font-family: ${FONT_FAMILY};
+    outline: none;
+    color: ${TEXT};
+}
+
+QPushButton {
+    background-color: ${HOVER};
+    color: ${TEXT};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 6px 14px;
+    font-size: ${SIZE_BODY}px;
+}
+
+QPushButton:hover {
+    background-color: ${BORDER};
+}
+
+QPushButton:pressed {
+    background-color: ${PRIMARY};
+    border-color: ${PRIMARY};
+}
+
+QComboBox {
+    background-color: ${HOVER};
+    color: ${TEXT};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 4px 10px;
+    font-size: ${SIZE_BODY}px;
+}
+
+QComboBox:hover {
+    border-color: ${PRIMARY};
+}
+
+QComboBox QAbstractItemView {
+    background-color: ${CARD};
+    color: ${TEXT};
+    border: 1px solid ${BORDER};
+    selection-background-color: ${HOVER};
+}
+
+QWidget#MainWindowRoot {
+    background-color: ${BACKGROUND};
+    border-radius: ${RADIUS}px;
+}
+
+QWidget#TitleBar {
+    background-color: ${BACKGROUND};
+    border-top-left-radius: ${RADIUS}px;
+    border-top-right-radius: ${RADIUS}px;
+}
+
+QLabel#TitleBarLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+}
+
+WindowControlButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+WindowControlButton:hover {
+    background-color: ${HOVER};
+}
+
+WindowControlButton#CloseButton:hover {
+    background-color: ${ERROR};
+}
+
+QWidget#Sidebar {
+    background-color: ${SIDEBAR};
+    border-right: 1px solid ${BORDER};
+}
+
+QStackedWidget#PageStack {
+    background-color: ${BACKGROUND};
+}
+
+QWidget#BasePage {
+    background-color: ${BACKGROUND};
+}
+
+SidebarButton {
+    background-color: transparent;
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+    text-align: left;
+    padding-left: 16px;
+}
+
+SidebarButton:hover {
+    background-color: ${HOVER};
+    color: ${TEXT};
+}
+
+SidebarButton[active="true"] {
+    background-color: ${HOVER};
+    color: ${TEXT};
+    font-weight: 600;
+}
+
+QWidget#SidebarIndicator {
+    background-color: ${PRIMARY};
+    border-radius: 2px;
+}
+
+QFrame#Card {
+    background-color: ${CARD};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS}px;
+}
+
+QLabel#PageHeading {
+    color: ${TEXT};
+    font-size: ${SIZE_HEADING}px;
+    font-weight: 700;
+}
+
+QLabel#PageSubtitle {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+}
+
+QLabel#CardPlaceholderLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+ProgressBar {
+    background-color: ${HOVER};
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    text-align: center;
+    color: transparent;
+}
+
+ProgressBar::chunk {
+    background-color: ${SUCCESS};
+    border-radius: ${RADIUS_SMALL}px;
+}
+
+ProgressBar[severity="warning"]::chunk {
+    background-color: ${WARNING};
+}
+
+ProgressBar[severity="error"]::chunk {
+    background-color: ${ERROR};
+}
+
+StatusChip {
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 2px 8px;
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+}
+
+StatusChip[severity="success"] {
+    background-color: ${SUCCESS_BG};
+    color: ${SUCCESS};
+}
+
+StatusChip[severity="warning"] {
+    background-color: ${WARNING_BG};
+    color: ${WARNING};
+}
+
+StatusChip[severity="error"] {
+    background-color: ${ERROR_BG};
+    color: ${ERROR};
+}
+
+StatusChip[severity="neutral"] {
+    background-color: ${HOVER};
+    color: ${TEXT_SECONDARY};
+}
+
+QLabel#StatCardTitle {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+}
+
+QLabel#StatCardValue {
+    color: ${TEXT};
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 700;
+}
+
+QLabel#ConnectionRowName {
+    color: ${TEXT};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+}
+
+QLabel#ConnectionRowDetail {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QLabel#EmptyStateTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 700;
+}
+
+QLabel#EmptyStateSubtitle {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+}
+
+QPushButton#BoostCtaButton {
+    background-color: ${PRIMARY};
+    color: ${TEXT};
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 8px 24px;
+    font-weight: 600;
+}
+
+QPushButton#BoostCtaButton:hover {
+    background-color: ${PRIMARY_HOVER};
+}
+
+QLabel#ChartCardTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+}
+
+QLabel#ChartEmptyState {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QLabel#GamesStatusLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+}
+
+QLabel#SecondaryPathLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QLabel#BoostAppCardTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 700;
+}
+
+BoostAppCard {
+    background-color: ${CARD};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS}px;
+}
+
+BoostAppCard:hover {
+    background-color: ${HOVER};
+    border-color: ${PRIMARY};
+}
+
+QLineEdit {
+    background-color: ${HOVER};
+    color: ${TEXT};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 0 12px;
+    font-size: ${SIZE_BODY}px;
+}
+
+QLineEdit:focus {
+    border-color: ${PRIMARY};
+}
+
+QPushButton#BoostScreenBackButton {
+    background-color: transparent;
+    border: none;
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+    padding: 4px 8px;
+}
+
+QPushButton#BoostScreenBackButton:hover {
+    color: ${TEXT};
+}
+
+QLabel#BoostScreenStatusLabel {
+    color: ${TEXT};
+    font-size: ${SIZE_DISPLAY}px;
+    font-weight: 700;
+}
+
+QLabel#BoostScreenStatRow {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+}
+
+QFrame#BoostScreenDivider {
+    background-color: ${BORDER};
+    border: none;
+}
+
+QPushButton#BoostStopButton {
+    background-color: ${ERROR};
+    color: ${TEXT};
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 12px 32px;
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 700;
+}
+
+QPushButton#BoostStopButton:hover {
+    background-color: ${PRIMARY_HOVER};
+}
+
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
+QChartView {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: ${BORDER};
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: ${HOVER};
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
