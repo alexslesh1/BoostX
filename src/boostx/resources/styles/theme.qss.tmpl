@@ -356,3 +356,81 @@ QScrollBar::handle:vertical:hover {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
 }
+
+QWidget#AuthWindowRoot {
+    background-color: ${BACKGROUND};
+    border-radius: ${RADIUS}px;
+}
+
+QWidget#AuthPage {
+    background-color: ${BACKGROUND};
+}
+
+QLabel#AuthTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_HEADING}px;
+    font-weight: 700;
+}
+
+QLabel#AuthSubtitle {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_BODY}px;
+}
+
+QLabel#AuthFieldLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+}
+
+QLabel#AuthErrorLabel {
+    color: ${ERROR};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QLabel#AuthStatusLabel {
+    color: ${SUCCESS};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QPushButton#AuthPrimaryButton {
+    background-color: ${PRIMARY};
+    color: ${TEXT};
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 10px 16px;
+    font-size: ${SIZE_BODY}px;
+    font-weight: 700;
+}
+
+QPushButton#AuthPrimaryButton:hover {
+    background-color: ${PRIMARY_HOVER};
+}
+
+QPushButton#AuthPrimaryButton:disabled {
+    background-color: ${HOVER};
+    color: ${TEXT_SECONDARY};
+}
+
+QPushButton#AuthLinkButton {
+    background-color: transparent;
+    border: none;
+    color: ${PRIMARY};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+    padding: 2px;
+    text-align: left;
+}
+
+QPushButton#AuthLinkButton:hover {
+    color: ${PRIMARY_HOVER};
+}
+
+QLabel#OfflineBanner {
+    background-color: ${WARNING_BG};
+    color: ${WARNING};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: ${RADIUS_SMALL}px;
+}

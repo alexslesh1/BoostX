@@ -1,9 +1,10 @@
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from boostx.config.layout import LayoutConstants
 from boostx.config.paths import AppPaths
+from boostx.core.services.api.session_manager import SessionManager
 from boostx.core.services.boost.boost_repository import BoostRepository
 from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.monitor.system_monitor_service import SystemMonitorService
@@ -25,8 +26,9 @@ from boostx.ui.pages.settings_page import SettingsPage
 
 
 class MainWindow(FramelessWindowMixin, QWidget):
-    def __init__(self) -> None:
+    def __init__(self, session_manager: SessionManager) -> None:
         super().__init__()
+        self._session_manager = session_manager
         self.setObjectName("MainWindowRoot")
         self.setWindowTitle("BoostX")
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
@@ -43,6 +45,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
 
         self._title_bar = TitleBar("BoostX", self)
+        self._offline_banner = QLabel(
+            "Offline — showing cached data. Changes will sync when reconnected.", self
+        )
+        self._offline_banner.setObjectName("OfflineBanner")
+        self._offline_banner.setVisible(self._session_manager.is_offline)
+        self._session_manager.offline_changed.connect(self._offline_banner.setVisible)
+
         self._sidebar = Sidebar(self)
         self._stack = FadeStackedWidget(self)
         self._router = PageRouter(self._stack)
@@ -64,7 +73,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
             2: BoostPage(self._boost_service, self._boost_sequence_controller, self._stack),
             3: CleanerPage(self._stack),
             4: SettingsPage(self._boost_service, self._stack),
-            5: AccountPage(self._stack),
+            5: AccountPage(self._session_manager, self._stack),
             6: AboutPage(self._stack),
         }
         for index, page in pages.items():
@@ -76,6 +85,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         outer_layout.setContentsMargins(margin, margin, margin, margin)
         outer_layout.setSpacing(0)
         outer_layout.addWidget(self._title_bar)
+        outer_layout.addWidget(self._offline_banner)
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
