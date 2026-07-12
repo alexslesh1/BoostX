@@ -473,3 +473,70 @@ QLabel#OfflineBanner {
     padding: 6px 12px;
     border-radius: ${RADIUS_SMALL}px;
 }
+
+QCheckBox {
+    color: ${TEXT};
+    font-size: ${SIZE_BODY}px;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid ${BORDER};
+    background-color: ${HOVER};
+}
+
+QCheckBox::indicator:hover {
+    border-color: ${PRIMARY};
+}
+
+QCheckBox::indicator:checked {
+    background-color: ${PRIMARY};
+    border-color: ${PRIMARY};
+}
+
+QLabel#CleanerSectionTitle {
+    color: ${TEXT};
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 700;
+}
+
+QLabel#HealthPercentLabel {
+    color: ${TEXT};
+    font-size: ${SIZE_JUMBO}px;
+    font-weight: 800;
+}
+
+QLabel#HealthPercentLabel[severity="warning"] {
+    color: ${WARNING};
+}
+
+QLabel#HealthPercentLabel[severity="error"] {
+    color: ${ERROR};
+}
+
+QPushButton#CleanerPrimaryButton {
+    background-color: ${PRIMARY};
+    color: ${TEXT};
+    border: none;
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 10px 22px;
+    font-weight: 700;
+}
+
+QPushButton#CleanerPrimaryButton:hover {
+    background-color: ${PRIMARY_HOVER};
+}
+
+QPushButton#CleanerPrimaryButton:disabled {
+    background-color: ${HOVER};
+    color: ${TEXT_SECONDARY};
+}
+
+QLabel#CleanerResultLabel {
+    color: ${SUCCESS};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 600;
+}

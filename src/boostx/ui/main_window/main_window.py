@@ -67,11 +67,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
         dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
+        self._cleaner_page = CleanerPage(self._stack)
+
         pages = {
             0: dashboard_page,
             1: MonitorPage(self._monitor_controller, self._stack),
             2: BoostPage(self._boost_service, self._boost_sequence_controller, self._stack),
-            3: CleanerPage(self._stack),
+            3: self._cleaner_page,
             4: SettingsPage(self._boost_service, self._stack),
             5: AccountPage(self._session_manager, self._stack),
             6: AboutPage(self._stack),
@@ -115,5 +117,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
+        self._cleaner_page.shutdown()
         self._boost_repository.close()
         super().closeEvent(event)
