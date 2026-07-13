@@ -46,15 +46,18 @@ class _BridgeRequestHandler(socketserver.BaseRequestHandler):
             logger.debug(f"SOCKS5 bridge: bad client request: {exc}")
             return
 
+        session_id = f"{dest_host}:{dest_port}#{id(self.request):x}"
+
         try:
             upstream_socket = self.server.upstream_connector(dest_host, dest_port)
         except Exception as exc:
-            logger.warning(f"SOCKS5 bridge: upstream connect failed for {dest_host}:{dest_port}: {exc}")
+            logger.warning(f"SOCKS5 bridge [{session_id}]: upstream connect failed: {exc}")
             self._send_reply(_REPLY_GENERAL_FAILURE)
             return
 
+        logger.debug(f"SOCKS5 bridge [{session_id}]: connected, relaying")
         self._send_reply(_REPLY_SUCCEEDED)
-        self._relay(self.request, upstream_socket)
+        self._relay(session_id, self.request, upstream_socket)
 
     def _read_socks5_request(self) -> tuple[str, int]:
         client = self.request
@@ -88,30 +91,63 @@ class _BridgeRequestHandler(socketserver.BaseRequestHandler):
         # or Electron app; 0.0.0.0:0 is the conventional placeholder.
         self.request.sendall(bytes([_SOCKS_VERSION, reply_code, 0x00, _ATYP_IPV4, 0, 0, 0, 0, 0, 0]))
 
-    def _relay(self, client_socket: socket.socket, upstream_socket: socket.socket) -> None:
+    def _relay(self, session_id: str, client_socket: socket.socket, upstream_socket: socket.socket) -> None:
         reverse_pump = threading.Thread(
-            target=self._pump, args=(upstream_socket, client_socket), daemon=True
+            target=self._pump,
+            args=(session_id, "upstream->client", upstream_socket, client_socket),
+            daemon=True,
         )
         reverse_pump.start()
-        self._pump(client_socket, upstream_socket)
-        reverse_pump.join(timeout=2.0)
+        try:
+            self._pump(session_id, "client->upstream", client_socket, upstream_socket)
+        finally:
+            reverse_pump.join(timeout=2.0)
+            # The framework closes the client-facing socket for us once
+            # handle() returns; the upstream socket is ours to clean up —
+            # shutdown() alone (below) doesn't release the file descriptor.
+            try:
+                upstream_socket.close()
+            except OSError:
+                pass
+        logger.debug(f"SOCKS5 bridge [{session_id}]: relay finished")
 
     @staticmethod
-    def _pump(source: socket.socket, destination: socket.socket) -> None:
+    def _pump(session_id: str, direction: str, source: socket.socket, destination: socket.socket) -> None:
+        total_bytes = 0
         try:
             while True:
                 chunk = source.recv(_RELAY_CHUNK_SIZE)
                 if not chunk:
+                    logger.debug(f"SOCKS5 bridge [{session_id}] {direction}: clean EOF after {total_bytes} bytes")
                     break
+                total_bytes += len(chunk)
                 destination.sendall(chunk)
-        except OSError:
-            pass
-        finally:
+        except OSError as exc:
+            logger.debug(f"SOCKS5 bridge [{session_id}] {direction}: {exc} after {total_bytes} bytes")
+            # A real error (as opposed to a clean EOF) means the connection
+            # itself is broken — tear down both legs, not just this one.
             for sock in (source, destination):
                 try:
                     sock.shutdown(socket.SHUT_RDWR)
                 except OSError:
                     pass
+            return
+
+        # Clean EOF only means THIS direction is done (the peer finished
+        # writing) — it says nothing about the other direction, which may
+        # still be relaying an in-flight response. Half-closing just the
+        # write side propagates that forward without killing a still-active
+        # peer leg out from under it. This mainly matters for a long-lived,
+        # pooled/keep-alive connection (what Discord's own HTTP client
+        # uses) rather than a one-shot request like curl, where the whole
+        # connection ends right after anyway and the distinction is
+        # invisible — closing both sides unconditionally on ANY signal,
+        # which is what happened before this fix, is exactly the kind of
+        # bug that only shows up under sustained keep-alive traffic.
+        try:
+            destination.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
 
     @staticmethod
     def _recv_exact(sock: socket.socket, count: int) -> bytes:
