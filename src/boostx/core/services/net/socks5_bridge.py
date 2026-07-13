@@ -36,6 +36,48 @@ _REPLY_COMMAND_NOT_SUPPORTED = 0x07
 _RELAY_CHUNK_SIZE = 8192
 
 
+def _extract_sni(data: bytes) -> str | None:
+    """Best-effort SNI extraction from a plaintext TLS ClientHello. The SNI
+    extension is sent unencrypted by design (the server needs it before any
+    keys exist), so this needs no decryption — just enough of RFC 8446's
+    record/handshake framing to walk to the extension. Returns None on any
+    failure or on non-ClientHello traffic; this exists purely so a session's
+    first outbound chunk can be compared byte-for-byte against a known-good
+    client (e.g. curl) when diagnosing why one client is rejected and
+    another isn't — it must never affect the relay itself.
+    """
+    try:
+        if len(data) < 5 or data[0] != 0x16:  # TLS record type: handshake
+            return None
+        pos = 5  # skip the 5-byte record header
+        if data[pos] != 0x01:  # Handshake type: ClientHello
+            return None
+        pos += 4  # handshake type (1 byte) + length (3 bytes)
+        pos += 2 + 32  # client_version (2) + random (32)
+        session_id_len = data[pos]
+        pos += 1 + session_id_len
+        cipher_suites_len = int.from_bytes(data[pos:pos + 2], "big")
+        pos += 2 + cipher_suites_len
+        compression_len = data[pos]
+        pos += 1 + compression_len
+        extensions_len = int.from_bytes(data[pos:pos + 2], "big")
+        pos += 2
+        extensions_end = pos + extensions_len
+        while pos < extensions_end:
+            ext_type = int.from_bytes(data[pos:pos + 2], "big")
+            ext_len = int.from_bytes(data[pos + 2:pos + 4], "big")
+            ext_data_start = pos + 4
+            if ext_type == 0x0000:  # server_name
+                sni_pos = ext_data_start + 2  # skip server_name_list length
+                if data[sni_pos] == 0x00:  # name_type: host_name
+                    name_len = int.from_bytes(data[sni_pos + 1:sni_pos + 3], "big")
+                    return data[sni_pos + 3:sni_pos + 3 + name_len].decode("ascii", errors="replace")
+            pos = ext_data_start + ext_len
+        return None
+    except (IndexError, UnicodeDecodeError):
+        return None
+
+
 class _BridgeRequestHandler(socketserver.BaseRequestHandler):
     server: "_BridgeServer"
 
@@ -55,7 +97,7 @@ class _BridgeRequestHandler(socketserver.BaseRequestHandler):
             self._send_reply(_REPLY_GENERAL_FAILURE)
             return
 
-        logger.debug(f"SOCKS5 bridge [{session_id}]: connected, relaying")
+        logger.info(f"SOCKS5 bridge [{session_id}]: connected, relaying")
         self._send_reply(_REPLY_SUCCEEDED)
         self._relay(session_id, self.request, upstream_socket)
 
@@ -109,21 +151,36 @@ class _BridgeRequestHandler(socketserver.BaseRequestHandler):
                 upstream_socket.close()
             except OSError:
                 pass
-        logger.debug(f"SOCKS5 bridge [{session_id}]: relay finished")
+        logger.info(f"SOCKS5 bridge [{session_id}]: relay finished")
 
     @staticmethod
     def _pump(session_id: str, direction: str, source: socket.socket, destination: socket.socket) -> None:
         total_bytes = 0
+        first_chunk = True
         try:
             while True:
                 chunk = source.recv(_RELAY_CHUNK_SIZE)
                 if not chunk:
-                    logger.debug(f"SOCKS5 bridge [{session_id}] {direction}: clean EOF after {total_bytes} bytes")
+                    logger.info(f"SOCKS5 bridge [{session_id}] {direction}: clean EOF after {total_bytes} bytes")
                     break
+                if first_chunk:
+                    first_chunk = False
+                    # Only the client's very first outbound chunk carries a
+                    # TLS ClientHello worth inspecting — this is the exact
+                    # byte sequence a fingerprinting server (e.g. Cloudflare)
+                    # would judge, so it's logged unconditionally rather than
+                    # only on error, letting a failing session be compared
+                    # against a known-good one (e.g. curl) after the fact.
+                    if direction == "client->upstream":
+                        sni = _extract_sni(chunk)
+                        logger.info(
+                            f"SOCKS5 bridge [{session_id}] {direction}: first chunk "
+                            f"{len(chunk)} bytes, sni={sni!r}, prefix={chunk[:16].hex()}"
+                        )
                 total_bytes += len(chunk)
                 destination.sendall(chunk)
         except OSError as exc:
-            logger.debug(f"SOCKS5 bridge [{session_id}] {direction}: {exc} after {total_bytes} bytes")
+            logger.info(f"SOCKS5 bridge [{session_id}] {direction}: {exc} after {total_bytes} bytes")
             # A real error (as opposed to a clean EOF) means the connection
             # itself is broken — tear down both legs, not just this one.
             for sock in (source, destination):
