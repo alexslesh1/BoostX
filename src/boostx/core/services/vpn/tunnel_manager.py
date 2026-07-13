@@ -6,11 +6,22 @@ invisible to every other process on the machine. Split tunneling is then
 achieved purely by binding specific sockets to this adapter (see
 interface_binding.py), not by anything this module does.
 
-"Ready" is verified two ways before anything is reported as active: the
-tunnel's own Windows service must actually be RUNNING (not just
-installed), and a network adapter with the expected local address must
-exist. An adapter existing on its own proves nothing — it can be a stale
-leftover from a previous session — so both checks are required.
+"Ready" is verified in three stages before anything is reported as
+active:
+1. The tunnel's own Windows service must actually be RUNNING (not just
+   installed) and a network adapter with the expected local address must
+   exist — an adapter existing on its own proves nothing, it can be a
+   stale leftover from a previous session.
+2. A single scoped, very-high-metric default route is added for that
+   interface (see _add_scoped_route) — `Table = off` means the interface
+   otherwise has zero route table entries, and IP_UNICAST_IF-bound
+   sockets can only *prefer* an interface among routes that already
+   exist, not conjure one out of thin air. Without this, every
+   interface-bound socket fails with WSAENETUNREACH (10051) regardless
+   of how healthy the tunnel's own WireGuard handshake is.
+3. A real bound TCP connect through the interface to a stable public
+   endpoint, retried within the readiness window — the actual proof
+   traffic can flow, not just that the pieces exist.
 """
 from __future__ import annotations
 
@@ -48,6 +59,15 @@ _SERVICE_QUERY_TIMEOUT_S = 10.0
 _PROBE_HOST = "1.1.1.1"
 _PROBE_PORT = 443
 _PROBE_TIMEOUT_S = 3.0
+# `Table = off` means wireguard.exe never adds ANY route referencing the
+# tunnel interface — but IP_UNICAST_IF only *prefers* a given interface
+# among routes that already exist; it can't manufacture a path out of
+# thin air. With zero routes for the interface, every IP_UNICAST_IF-bound
+# socket fails with WSAENETUNREACH (10051) no matter how healthy the
+# tunnel's own handshake is. This route exists purely so those sockets
+# have something to resolve against; the enormous metric keeps it from
+# ever being preferred by the rest of the system's normal traffic.
+_SCOPED_ROUTE_METRIC = 9999
 _ADDRESS_LINE_PATTERN = re.compile(r"^\s*Address\s*=\s*([0-9.]+)", re.IGNORECASE | re.MULTILINE)
 _GENERIC_FAILURE_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
 
@@ -142,9 +162,21 @@ class TunnelManager:
             logger.warning(f"Tunnel bring-up exited {exit_code} (permission prompt may have been declined)")
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
-        interface_index = self._wait_for_tunnel_ready(local_ip)
+        interface_index = self._wait_for_adapter_and_service(local_ip)
         if interface_index is None:
             logger.warning("Tunnel service/adapter never reached a verified running state; rolling back")
+            self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
+
+        if not self._add_scoped_route(interface_index):
+            logger.warning("Failed to add the scoped tunnel route; rolling back")
+            self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
+
+        if not self._wait_for_route_probe(interface_index):
+            logger.warning(
+                "Tunnel route probe never succeeded even with a scoped route present; rolling back"
+            )
             self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
@@ -157,31 +189,59 @@ class TunnelManager:
             return
         executable = find_wireguard_executable()
         if executable is not None:
+            self._remove_scoped_route(self._interface_index)
             self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
             if not self._wait_for_teardown():
                 logger.warning("Tunnel service still reports running after an uninstall attempt")
         self._interface_index = None
         self._local_ip = None
 
-    def _wait_for_tunnel_ready(self, local_ip: str) -> int | None:
+    def _wait_for_adapter_and_service(self, local_ip: str) -> int | None:
         deadline = time.monotonic() + _TUNNEL_READY_TIMEOUT_S
-        interface_index: int | None = None
         while time.monotonic() < deadline:
-            if interface_index is None and is_tunnel_service_running():
+            if is_tunnel_service_running():
                 try:
-                    interface_index = find_interface_index_for_ip(local_ip)
+                    index = find_interface_index_for_ip(local_ip)
                 except OSError:
                     return None
-
-            if interface_index is not None:
-                if _probe_route_via_interface(interface_index):
-                    return interface_index
-                logger.debug(
-                    f"Tunnel adapter present (index {interface_index}) but route probe "
-                    f"failed; service_running={is_tunnel_service_running()} — retrying"
-                )
+                if index is not None:
+                    return index
             time.sleep(_ADAPTER_POLL_INTERVAL_S)
         return None
+
+    def _wait_for_route_probe(self, interface_index: int) -> bool:
+        deadline = time.monotonic() + _TUNNEL_READY_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if _probe_route_via_interface(interface_index):
+                return True
+            logger.debug(
+                f"Route probe failed via interface {interface_index}; "
+                f"service_running={is_tunnel_service_running()} — retrying"
+            )
+            time.sleep(_ADAPTER_POLL_INTERVAL_S)
+        return False
+
+    def _add_scoped_route(self, interface_index: int) -> bool:
+        exit_code = self._run_elevated(
+            "netsh",
+            [
+                "interface", "ipv4", "add", "route",
+                "prefix=0.0.0.0/0",
+                f"interface={interface_index}",
+                f"metric={_SCOPED_ROUTE_METRIC}",
+                "store=active",
+            ],
+        )
+        return exit_code == 0
+
+    def _remove_scoped_route(self, interface_index: int) -> None:
+        # Best-effort: removing the adapter itself (via /uninstalltunnelservice
+        # right after this) purges any routes tied to it regardless, but this
+        # cleans up immediately rather than relying on that.
+        self._run_elevated(
+            "netsh",
+            ["interface", "ipv4", "delete", "route", "prefix=0.0.0.0/0", f"interface={interface_index}", "store=active"],
+        )
 
     def _wait_for_teardown(self) -> bool:
         deadline = time.monotonic() + _TUNNEL_READY_TIMEOUT_S
