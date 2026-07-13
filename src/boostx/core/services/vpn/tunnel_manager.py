@@ -15,6 +15,7 @@ leftover from a previous session — so both checks are required.
 from __future__ import annotations
 
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -24,7 +25,7 @@ from loguru import logger
 
 from boostx.config.paths import AppPaths
 from boostx.core.services.vpn.gui_suppressor import suppress_component_gui
-from boostx.core.services.vpn.interface_binding import find_interface_index_for_ip
+from boostx.core.services.vpn.interface_binding import bind_socket_to_interface, find_interface_index_for_ip
 from boostx.core.services.vpn.wireguard_dependency import find_wireguard_executable
 
 _TUNNEL_NAME = "boostxvpn"
@@ -32,10 +33,21 @@ _TUNNEL_NAME = "boostxvpn"
 # this way — this is how we verify the tunnel is genuinely running, not
 # just how we tell it apart.
 _SERVICE_NAME = f"WireGuardTunnel${_TUNNEL_NAME}"
-_ADAPTER_READY_TIMEOUT_S = 10.0
+_TUNNEL_READY_TIMEOUT_S = 15.0
 _ADAPTER_POLL_INTERVAL_S = 0.3
 _ELEVATED_ACTION_TIMEOUT_S = 30.0
 _SERVICE_QUERY_TIMEOUT_S = 10.0
+# A service being RUNNING and an adapter existing with the right address
+# proves neither that the WireGuard handshake completed nor that the
+# machine's network stack has a working path out through it — especially
+# right after another VPN was toggled off, when Windows' network state
+# can stay transitional for a few seconds. This probe is the actual
+# proof: a real bound TCP connect through the interface to a stable
+# public endpoint, retried within the readiness window rather than
+# trusted on the first attempt.
+_PROBE_HOST = "1.1.1.1"
+_PROBE_PORT = 443
+_PROBE_TIMEOUT_S = 3.0
 _ADDRESS_LINE_PATTERN = re.compile(r"^\s*Address\s*=\s*([0-9.]+)", re.IGNORECASE | re.MULTILINE)
 _GENERIC_FAILURE_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
 
@@ -61,7 +73,7 @@ def _prepare_conf(conf_text: str) -> tuple[str, str]:
     return conf_text, local_ip
 
 
-def _is_tunnel_service_running() -> bool:
+def is_tunnel_service_running() -> bool:
     if sys.platform != "win32":  # pragma: no cover - Windows-only feature
         return False
     try:
@@ -74,6 +86,26 @@ def _is_tunnel_service_running() -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return result.returncode == 0 and "RUNNING" in result.stdout
+
+
+def _probe_route_via_interface(interface_index: int) -> bool:
+    """The actual proof the tunnel works: bind a test socket to the
+    interface and make a real TCP connection through it. Service state
+    and adapter presence can both be true while the network stack still
+    has no working path out — this is the check that would have caught
+    the exact WinError 10051 (network unreachable) seen in practice."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(_PROBE_TIMEOUT_S)
+            bind_socket_to_interface(sock, interface_index)
+            sock.connect((_PROBE_HOST, _PROBE_PORT))
+            return True
+        finally:
+            sock.close()
+    except OSError as exc:
+        logger.debug(f"Tunnel route probe failed via interface {interface_index}: {exc}")
+        return False
 
 
 class TunnelManager:
@@ -132,25 +164,32 @@ class TunnelManager:
         self._local_ip = None
 
     def _wait_for_tunnel_ready(self, local_ip: str) -> int | None:
-        deadline = time.monotonic() + _ADAPTER_READY_TIMEOUT_S
+        deadline = time.monotonic() + _TUNNEL_READY_TIMEOUT_S
+        interface_index: int | None = None
         while time.monotonic() < deadline:
-            if _is_tunnel_service_running():
+            if interface_index is None and is_tunnel_service_running():
                 try:
-                    index = find_interface_index_for_ip(local_ip)
+                    interface_index = find_interface_index_for_ip(local_ip)
                 except OSError:
                     return None
-                if index is not None:
-                    return index
+
+            if interface_index is not None:
+                if _probe_route_via_interface(interface_index):
+                    return interface_index
+                logger.debug(
+                    f"Tunnel adapter present (index {interface_index}) but route probe "
+                    f"failed; service_running={is_tunnel_service_running()} — retrying"
+                )
             time.sleep(_ADAPTER_POLL_INTERVAL_S)
         return None
 
     def _wait_for_teardown(self) -> bool:
-        deadline = time.monotonic() + _ADAPTER_READY_TIMEOUT_S
+        deadline = time.monotonic() + _TUNNEL_READY_TIMEOUT_S
         while time.monotonic() < deadline:
-            if not _is_tunnel_service_running():
+            if not is_tunnel_service_running():
                 return True
             time.sleep(_ADAPTER_POLL_INTERVAL_S)
-        return not _is_tunnel_service_running()
+        return not is_tunnel_service_running()
 
     @staticmethod
     def _run_elevated(executable: str, args: list[str]) -> int:
