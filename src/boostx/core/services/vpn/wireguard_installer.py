@@ -30,6 +30,7 @@ from loguru import logger
 
 from boostx.config.paths import AppPaths
 from boostx.core.services.vpn.authenticode import verify_authenticode_signature
+from boostx.core.services.vpn.gui_suppressor import suppress_component_gui
 from boostx.core.services.vpn.wireguard_dependency import find_wireguard_executable
 
 _INSTALLER_URL = "https://download.wireguard.com/windows-client/wireguard-installer.exe"
@@ -117,6 +118,7 @@ def _run_elevated_silent_install(installer_path: Path) -> None:
         text=True,
         timeout=_INSTALL_TIMEOUT_S,
     )
+    suppress_component_gui()
     if result.returncode != 0:
         logger.warning(f"Component setup exited {result.returncode}: {result.stderr.strip()}")
         raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE)

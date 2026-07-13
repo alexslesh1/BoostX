@@ -5,6 +5,12 @@ routing table — the tunnel adapter comes up with its own address only,
 invisible to every other process on the machine. Split tunneling is then
 achieved purely by binding specific sockets to this adapter (see
 interface_binding.py), not by anything this module does.
+
+"Ready" is verified two ways before anything is reported as active: the
+tunnel's own Windows service must actually be RUNNING (not just
+installed), and a network adapter with the expected local address must
+exist. An adapter existing on its own proves nothing — it can be a stale
+leftover from a previous session — so both checks are required.
 """
 from __future__ import annotations
 
@@ -17,13 +23,19 @@ from pathlib import Path
 from loguru import logger
 
 from boostx.config.paths import AppPaths
+from boostx.core.services.vpn.gui_suppressor import suppress_component_gui
 from boostx.core.services.vpn.interface_binding import find_interface_index_for_ip
 from boostx.core.services.vpn.wireguard_dependency import find_wireguard_executable
 
 _TUNNEL_NAME = "boostxvpn"
+# WireGuard for Windows registers each tunnel as a Windows service named
+# this way — this is how we verify the tunnel is genuinely running, not
+# just how we tell it apart.
+_SERVICE_NAME = f"WireGuardTunnel${_TUNNEL_NAME}"
 _ADAPTER_READY_TIMEOUT_S = 10.0
 _ADAPTER_POLL_INTERVAL_S = 0.3
 _ELEVATED_ACTION_TIMEOUT_S = 30.0
+_SERVICE_QUERY_TIMEOUT_S = 10.0
 _ADDRESS_LINE_PATTERN = re.compile(r"^\s*Address\s*=\s*([0-9.]+)", re.IGNORECASE | re.MULTILINE)
 _GENERIC_FAILURE_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
 
@@ -49,6 +61,21 @@ def _prepare_conf(conf_text: str) -> tuple[str, str]:
     return conf_text, local_ip
 
 
+def _is_tunnel_service_running() -> bool:
+    if sys.platform != "win32":  # pragma: no cover - Windows-only feature
+        return False
+    try:
+        result = subprocess.run(
+            ["sc", "query", _SERVICE_NAME],
+            capture_output=True,
+            text=True,
+            timeout=_SERVICE_QUERY_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "RUNNING" in result.stdout
+
+
 class TunnelManager:
     def __init__(self) -> None:
         self._interface_index: int | None = None
@@ -65,7 +92,8 @@ class TunnelManager:
     def start(self, conf_text: str) -> int:
         """Idempotent: if already active, returns the existing interface
         index without reinstalling the tunnel. Returns the interface index
-        to bind sockets to."""
+        to bind sockets to. Raises TunnelBringUpError — and rolls back any
+        half-installed service — if the tunnel doesn't come up for real."""
         if self._interface_index is not None:
             return self._interface_index
 
@@ -82,8 +110,10 @@ class TunnelManager:
             logger.warning(f"Tunnel bring-up exited {exit_code} (permission prompt may have been declined)")
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
-        interface_index = self._wait_for_adapter(local_ip)
+        interface_index = self._wait_for_tunnel_ready(local_ip)
         if interface_index is None:
+            logger.warning("Tunnel service/adapter never reached a verified running state; rolling back")
+            self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
         self._interface_index = interface_index
@@ -96,20 +126,31 @@ class TunnelManager:
         executable = find_wireguard_executable()
         if executable is not None:
             self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
+            if not self._wait_for_teardown():
+                logger.warning("Tunnel service still reports running after an uninstall attempt")
         self._interface_index = None
         self._local_ip = None
 
-    def _wait_for_adapter(self, local_ip: str) -> int | None:
+    def _wait_for_tunnel_ready(self, local_ip: str) -> int | None:
         deadline = time.monotonic() + _ADAPTER_READY_TIMEOUT_S
         while time.monotonic() < deadline:
-            try:
-                index = find_interface_index_for_ip(local_ip)
-            except OSError:
-                return None
-            if index is not None:
-                return index
+            if _is_tunnel_service_running():
+                try:
+                    index = find_interface_index_for_ip(local_ip)
+                except OSError:
+                    return None
+                if index is not None:
+                    return index
             time.sleep(_ADAPTER_POLL_INTERVAL_S)
         return None
+
+    def _wait_for_teardown(self) -> bool:
+        deadline = time.monotonic() + _ADAPTER_READY_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if not _is_tunnel_service_running():
+                return True
+            time.sleep(_ADAPTER_POLL_INTERVAL_S)
+        return not _is_tunnel_service_running()
 
     @staticmethod
     def _run_elevated(executable: str, args: list[str]) -> int:
@@ -117,7 +158,14 @@ class TunnelManager:
         PowerShell's Start-Process -Verb RunAs, which is the standard way
         to both elevate AND get a real exit code back (ShellExecuteW alone
         is fire-and-forget). Only this one action needs admin rights —
-        everything else in the VPN feature runs unprivileged."""
+        everything else in the VPN feature runs unprivileged.
+
+        -WindowStyle Hidden only hints at the *initial* window state of
+        the launched process and does not reliably suppress a window a
+        GUI app creates itself afterward, so this sweeps for and closes
+        any such window afterward as a safety net — the whole feature is
+        meant to be invisible regardless of what the external tool does.
+        """
         if sys.platform != "win32":  # pragma: no cover - Windows-only feature
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
@@ -134,4 +182,5 @@ class TunnelManager:
         )
         if result.returncode != 0:
             logger.warning(f"Elevated component action exited {result.returncode}: {result.stderr.strip()}")
+        suppress_component_gui()
         return result.returncode
