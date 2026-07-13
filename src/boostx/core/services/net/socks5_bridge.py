@@ -1,20 +1,28 @@
 """A local, unauthenticated SOCKS5 server that relays every connection
-through an authenticated upstream SOCKS5 proxy (the shared 3proxy relay).
+through a pluggable upstream connector.
 
-Discord/Chromium's --proxy-server flag has no way to supply a SOCKS5
-username/password, so we bind a bridge on 127.0.0.1 that Discord connects
-to with no credentials at all; this process holds the real ones and does
-the RFC1929 handshake with the upstream relay on Discord's behalf.
+Discord/Chromium's --proxy-server flag (and, for the local-bridge variant
+used by the VPN feature, Telegram's tg://socks deep link) has no way to
+carry credentials or route selection logic, so we bind a bridge on
+127.0.0.1 that the app connects to with no credentials at all. What
+happens to a connection once it reaches this bridge is entirely up to the
+injected `UpstreamConnector` — today that's either an authenticated SOCKS5
+hop to the shared 3proxy relay (see discord_boost/telegram proxy paths),
+or a direct connect bound to the WireGuard tunnel interface (see
+core/services/vpn) — the bridge itself doesn't know or care which.
 """
 from __future__ import annotations
 
 import socket
 import socketserver
 import threading
-from dataclasses import dataclass
+from typing import Callable
 
 from loguru import logger
-from python_socks.sync import Proxy
+
+# Given (dest_host, dest_port), returns a connected socket to that
+# destination — however it gets there is the connector's business.
+UpstreamConnector = Callable[[str, int], socket.socket]
 
 _SOCKS_VERSION = 0x05
 _METHOD_NO_AUTH = 0x00
@@ -26,18 +34,6 @@ _REPLY_SUCCEEDED = 0x00
 _REPLY_GENERAL_FAILURE = 0x01
 _REPLY_COMMAND_NOT_SUPPORTED = 0x07
 _RELAY_CHUNK_SIZE = 8192
-_UPSTREAM_CONNECT_TIMEOUT_S = 10.0
-
-
-@dataclass(frozen=True)
-class UpstreamProxyConfig:
-    host: str
-    port: int
-    login: str
-    password: str
-
-    def to_url(self) -> str:
-        return f"socks5://{self.login}:{self.password}@{self.host}:{self.port}"
 
 
 class _BridgeRequestHandler(socketserver.BaseRequestHandler):
@@ -51,9 +47,7 @@ class _BridgeRequestHandler(socketserver.BaseRequestHandler):
             return
 
         try:
-            upstream_socket = Proxy.from_url(self.server.upstream_config.to_url()).connect(
-                dest_host, dest_port, timeout=_UPSTREAM_CONNECT_TIMEOUT_S
-            )
+            upstream_socket = self.server.upstream_connector(dest_host, dest_port)
         except Exception as exc:
             logger.warning(f"SOCKS5 bridge: upstream connect failed for {dest_host}:{dest_port}: {exc}")
             self._send_reply(_REPLY_GENERAL_FAILURE)
@@ -134,14 +128,14 @@ class _BridgeServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, upstream_config: UpstreamProxyConfig) -> None:
-        self.upstream_config = upstream_config
+    def __init__(self, upstream_connector: UpstreamConnector) -> None:
+        self.upstream_connector = upstream_connector
         super().__init__(("127.0.0.1", 0), _BridgeRequestHandler)
 
 
 class Socks5Bridge:
-    def __init__(self, upstream_config: UpstreamProxyConfig) -> None:
-        self._server = _BridgeServer(upstream_config)
+    def __init__(self, upstream_connector: UpstreamConnector) -> None:
+        self._server = _BridgeServer(upstream_connector)
         self._thread: threading.Thread | None = None
 
     @property

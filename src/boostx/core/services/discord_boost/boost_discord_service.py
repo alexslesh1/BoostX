@@ -6,7 +6,8 @@ from loguru import logger
 
 from boostx.core.services.api.models import ProxyCredentials
 from boostx.core.services.discord_boost.discord_launcher import find_discord_executable, launch_discord
-from boostx.core.services.discord_boost.socks5_bridge import Socks5Bridge, UpstreamProxyConfig
+from boostx.core.services.net.socks5_bridge import Socks5Bridge
+from boostx.core.services.net.socks5_upstream_connector import Socks5UpstreamConnector
 
 
 @dataclass(frozen=True)
@@ -31,13 +32,13 @@ class BoostDiscordService:
         if executable_path is None:
             return BoostDiscordResult(success=False, error="Discord installation not found.")
 
-        upstream = UpstreamProxyConfig(
+        connector = Socks5UpstreamConnector(
             host=credentials.host,
             port=credentials.port,
             login=credentials.login,
             password=credentials.password,
         )
-        bridge = Socks5Bridge(upstream)
+        bridge = Socks5Bridge(connector)
         try:
             bridge.start()
         except OSError as exc:

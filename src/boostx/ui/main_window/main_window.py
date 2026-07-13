@@ -8,12 +8,13 @@ from boostx.core.services.api.session_manager import SessionManager
 from boostx.core.services.boost.boost_repository import BoostRepository
 from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.monitor.system_monitor_service import SystemMonitorService
+from boostx.core.services.vpn.vpn_coordinator import VpnCoordinator
 from boostx.ui.components.sidebar.sidebar import Sidebar
 from boostx.ui.components.title_bar.title_bar import TitleBar
-from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
+from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
 from boostx.ui.controllers.monitor_controller import MonitorController
-from boostx.ui.controllers.telegram_boost_controller import TelegramBoostController
+from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
 from boostx.ui.main_window.frameless_mixin import FramelessWindowMixin
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.navigation.page_router import PageRouter
@@ -46,8 +47,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_repository = BoostRepository(AppPaths.data_dir() / "boost.db")
         self._boost_service = BoostService(self._boost_repository)
         self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
-        self._boost_discord_controller = BoostDiscordController(self._session_manager, parent=self)
-        self._telegram_boost_controller = TelegramBoostController(self._session_manager, parent=self)
+        self._vpn_coordinator = VpnCoordinator()
+        self._discord_vpn_controller = DiscordVpnController(
+            self._session_manager, self._vpn_coordinator, parent=self
+        )
+        self._telegram_vpn_controller = TelegramVpnController(
+            self._session_manager, self._vpn_coordinator, parent=self
+        )
 
         self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
@@ -81,8 +87,8 @@ class MainWindow(FramelessWindowMixin, QWidget):
             2: BoostPage(
                 self._boost_service,
                 self._boost_sequence_controller,
-                self._boost_discord_controller,
-                self._telegram_boost_controller,
+                self._discord_vpn_controller,
+                self._telegram_vpn_controller,
                 self._stack,
             ),
             3: self._cleaner_page,
@@ -130,8 +136,9 @@ class MainWindow(FramelessWindowMixin, QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
-        self._boost_discord_controller.shutdown()
-        self._telegram_boost_controller.shutdown()
+        self._discord_vpn_controller.shutdown()
+        self._telegram_vpn_controller.shutdown()
+        self._vpn_coordinator.shutdown()
         self._cleaner_page.shutdown()
         self._tweaks_page.shutdown()
         self._boost_repository.close()

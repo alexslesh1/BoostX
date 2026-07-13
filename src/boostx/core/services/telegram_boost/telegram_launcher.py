@@ -30,6 +30,20 @@ def launch_telegram_with_proxy(executable_path: Path, host: str, port: int, logi
     return webbrowser.open(deep_link)
 
 
+def launch_telegram_via_local_bridge(executable_path: Path, local_port: int) -> bool:
+    """Same as launch_telegram_with_proxy, but points at an unauthenticated
+    local relay (127.0.0.1) instead of the VPS directly — used by the
+    WireGuard VPN transport, where the local bridge is what actually
+    carries the connection through the tunnel."""
+    if not is_process_running(str(executable_path)):
+        if not _launch(executable_path):
+            return False
+        time.sleep(_POST_LAUNCH_WAIT_SECONDS)
+
+    deep_link = f"tg://socks?server=127.0.0.1&port={local_port}"
+    return webbrowser.open(deep_link)
+
+
 def _launch(executable_path: Path) -> bool:
     try:
         if platform.system() == "Darwin" and executable_path.suffix == ".app":

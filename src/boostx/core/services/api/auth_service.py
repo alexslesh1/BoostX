@@ -126,6 +126,9 @@ class AuthService:
             host=body["host"], port=body["port"], login=body["login"], password=body["password"]
         )
 
+    def get_vpn_config(self, access_token: str) -> str:
+        return self._client.request_text("GET", "/vpn/config", token=access_token)
+
     def check_health(self) -> bool:
         try:
             self._client.request("GET", "/health")

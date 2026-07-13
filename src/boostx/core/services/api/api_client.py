@@ -19,6 +19,28 @@ class ApiClient:
         json: dict | None = None,
         token: str | None = None,
     ) -> dict:
+        response = self._send(method, path, json=json, token=token)
+        if response.status_code == 204 or not response.content:
+            return {}
+        return response.json()
+
+    def request_text(
+        self,
+        method: str,
+        path: str,
+        json: dict | None = None,
+        token: str | None = None,
+    ) -> str:
+        response = self._send(method, path, json=json, token=token)
+        return response.text
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        json: dict | None = None,
+        token: str | None = None,
+    ) -> httpx.Response:
         headers = {"Authorization": f"Bearer {token}"} if token else None
         try:
             response = self._client.request(method, path, json=json, headers=headers)
@@ -33,10 +55,7 @@ class ApiClient:
                 status_code=response.status_code,
                 detail=detail,
             )
-
-        if response.status_code == 204 or not response.content:
-            return {}
-        return response.json()
+        return response
 
     @staticmethod
     def _extract_detail(response: httpx.Response) -> str | None:

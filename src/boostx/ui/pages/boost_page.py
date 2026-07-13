@@ -23,9 +23,9 @@ from boostx.core.services.discord_boost.discord_launcher import find_discord_exe
 from boostx.core.services.telegram_boost.telegram_launcher import find_telegram_executable
 from boostx.ui.components.boost_app_card import SLOT_SIZE, BoostAppCard
 from boostx.ui.components.boost_screen import BoostScreen
-from boostx.ui.controllers.boost_discord_controller import BoostDiscordController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
-from boostx.ui.controllers.telegram_boost_controller import TelegramBoostController
+from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
+from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.pages.base_page import BasePage
 
@@ -38,16 +38,16 @@ class BoostPage(BasePage):
         self,
         service: BoostService,
         sequence_controller: BoostSequenceController,
-        boost_discord_controller: BoostDiscordController,
-        telegram_boost_controller: TelegramBoostController,
+        discord_vpn_controller: DiscordVpnController,
+        telegram_vpn_controller: TelegramVpnController,
         parent: QWidget | None = None,
     ) -> None:
         # Must be assigned before super().__init__(), since it triggers _build_body() synchronously.
         self._service = service
         self._sequence_controller = sequence_controller
         self._communication_controllers = {
-            "discord": boost_discord_controller,
-            "telegram": telegram_boost_controller,
+            "discord": discord_vpn_controller,
+            "telegram": telegram_vpn_controller,
         }
         self._communication_finders = {
             "discord": find_discord_executable,

@@ -215,6 +215,13 @@ class SessionManager(QObject):
         token = self._access_token
         run_async(lambda: self._auth_service.get_proxy_credentials(token), on_success, on_error)
 
+    def get_vpn_config(self, on_success: Callable[[str], None], on_error: OnError) -> None:
+        # access_token is kept fresh by _schedule_refresh (silent refresh
+        # ~30s before the 15-minute expiry), so no extra refresh-before-call
+        # logic is needed here — same as get_proxy_credentials.
+        token = self._access_token
+        run_async(lambda: self._auth_service.get_vpn_config(token), on_success, on_error)
+
     def shutdown(self) -> None:
         self._refresh_timer.stop()
         self._retry_timer.stop()
