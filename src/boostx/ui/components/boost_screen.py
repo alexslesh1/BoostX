@@ -194,6 +194,9 @@ class BoostScreen(QWidget):
         text = _LAUNCHING_TEXT if step_key == "launch" else _PREPARING_TEXT
         self._set_status(text, "neutral", pulsing=True)
 
+    def show_progress(self, text: str) -> None:
+        self._set_status(text, "neutral", pulsing=True)
+
     def on_sequence_failed(self, message: str) -> None:
         self._set_status(message or "Boost Failed", "error", pulsing=False)
         self._timer.stop()

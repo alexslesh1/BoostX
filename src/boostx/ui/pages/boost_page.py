@@ -73,6 +73,7 @@ class BoostPage(BasePage):
         for controller in self._communication_controllers.values():
             controller.started.connect(self._on_communication_started)
             controller.failed.connect(self._on_communication_failed)
+            controller.progress.connect(self._on_communication_progress)
 
     def _build_body(self, layout: QVBoxLayout) -> None:
         toolbar = QHBoxLayout()
@@ -217,6 +218,9 @@ class BoostPage(BasePage):
     def _on_communication_failed(self, message: str) -> None:
         self._last_failure_message = message
         self._boost_screen.on_sequence_failed(message)
+
+    def _on_communication_progress(self, message: str) -> None:
+        self._boost_screen.show_progress(message)
 
     def _show_locate_prompt(self, entry: BoostCatalogEntry, status: BoostAppStatus | None) -> None:
         if status is not None and status.installed and not status.executable_path:
