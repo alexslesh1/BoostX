@@ -12,6 +12,7 @@ from boostx.core.services.vpn.vpn_coordinator import VpnCoordinator
 from boostx.ui.components.sidebar.sidebar import Sidebar
 from boostx.ui.components.title_bar.title_bar import TitleBar
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
+from boostx.ui.controllers.component_setup_controller import ComponentSetupController
 from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
 from boostx.ui.controllers.monitor_controller import MonitorController
 from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
@@ -63,6 +64,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._offline_banner.setVisible(self._session_manager.is_offline)
         self._session_manager.offline_changed.connect(self._offline_banner.setVisible)
 
+        self._setup_banner = QLabel("", self)
+        self._setup_banner.setObjectName("OfflineBanner")
+        self._setup_banner.setVisible(False)
+        self._component_setup_controller = ComponentSetupController(parent=self)
+        self._component_setup_controller.progress.connect(self._on_setup_progress)
+        self._component_setup_controller.finished.connect(self._on_setup_finished)
+
         self._sidebar = Sidebar(self)
         self._stack = FadeStackedWidget(self)
         self._router = PageRouter(self._stack)
@@ -72,6 +80,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._connect_signals()
 
         self._monitor_controller.start()
+        self._component_setup_controller.run_if_needed()
 
     def _register_pages(self) -> None:
         dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
@@ -107,6 +116,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         outer_layout.setSpacing(0)
         outer_layout.addWidget(self._title_bar)
         outer_layout.addWidget(self._offline_banner)
+        outer_layout.addWidget(self._setup_banner)
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -121,6 +131,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._title_bar.maximize_toggle_requested.connect(self._toggle_maximize)
         self._title_bar.close_requested.connect(self.close)
         self._sidebar.page_changed.connect(self._router.navigate_to)
+
+    def _on_setup_progress(self, message: str) -> None:
+        self._setup_banner.setText(message)
+        self._setup_banner.setVisible(True)
+
+    def _on_setup_finished(self, _success: bool) -> None:
+        self._setup_banner.setVisible(False)
 
     def _on_drag_delta(self, delta: QPoint) -> None:
         if not self.isMaximized():

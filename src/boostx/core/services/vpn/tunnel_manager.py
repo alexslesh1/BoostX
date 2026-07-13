@@ -25,6 +25,7 @@ _ADAPTER_READY_TIMEOUT_S = 10.0
 _ADAPTER_POLL_INTERVAL_S = 0.3
 _ELEVATED_ACTION_TIMEOUT_S = 30.0
 _ADDRESS_LINE_PATTERN = re.compile(r"^\s*Address\s*=\s*([0-9.]+)", re.IGNORECASE | re.MULTILINE)
+_GENERIC_FAILURE_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
 
 
 class TunnelBringUpError(Exception):
@@ -39,7 +40,7 @@ def _prepare_conf(conf_text: str) -> tuple[str, str]:
     """Returns (patched_conf_text, tunnel_local_ip)."""
     match = _ADDRESS_LINE_PATTERN.search(conf_text)
     if match is None:
-        raise TunnelBringUpError("VPN config is missing an Address line for [Interface].")
+        raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
     local_ip = match.group(1)
 
     if re.search(r"^\s*Table\s*=", conf_text, re.IGNORECASE | re.MULTILINE) is None:
@@ -70,7 +71,7 @@ class TunnelManager:
 
         executable = find_wireguard_executable()
         if executable is None:
-            raise TunnelBringUpError("WireGuard for Windows is not installed.")
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
         patched_conf, local_ip = _prepare_conf(conf_text)
         conf_path = _conf_path()
@@ -78,14 +79,12 @@ class TunnelManager:
 
         exit_code = self._run_elevated(str(executable), ["/installtunnelservice", str(conf_path)])
         if exit_code != 0:
-            raise TunnelBringUpError(
-                f"wireguard.exe /installtunnelservice exited with code {exit_code}. "
-                "The UAC prompt may have been declined."
-            )
+            logger.warning(f"Tunnel bring-up exited {exit_code} (permission prompt may have been declined)")
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
         interface_index = self._wait_for_adapter(local_ip)
         if interface_index is None:
-            raise TunnelBringUpError("WireGuard tunnel service started but the adapter never came up.")
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
         self._interface_index = interface_index
         self._local_ip = local_ip
@@ -120,7 +119,7 @@ class TunnelManager:
         is fire-and-forget). Only this one action needs admin rights —
         everything else in the VPN feature runs unprivileged."""
         if sys.platform != "win32":  # pragma: no cover - Windows-only feature
-            raise TunnelBringUpError("WireGuard tunnel control is only available on Windows.")
+            raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
         arg_list = ",".join(f"'{arg}'" for arg in args)
         command = (
@@ -134,5 +133,5 @@ class TunnelManager:
             timeout=_ELEVATED_ACTION_TIMEOUT_S,
         )
         if result.returncode != 0:
-            logger.warning(f"Elevated wireguard.exe action exited {result.returncode}: {result.stderr.strip()}")
+            logger.warning(f"Elevated component action exited {result.returncode}: {result.stderr.strip()}")
         return result.returncode

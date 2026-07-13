@@ -4,8 +4,7 @@ from pathlib import Path
 
 from boostx.core.services.vpn.models import DependencyStatus
 
-_WIREGUARD_DOWNLOAD_URL = "https://www.wireguard.com/install/"
-_MISSING_MESSAGE = "WireGuard for Windows is not installed. Install it to enable VPN routing."
+_MISSING_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
 
 _CANDIDATES = [
     r"C:\Program Files\WireGuard\wireguard.exe",
@@ -32,5 +31,5 @@ def find_wireguard_executable() -> Path | None:
 def check_wireguard() -> DependencyStatus:
     executable = find_wireguard_executable()
     if executable is None:
-        return DependencyStatus(available=False, message=_MISSING_MESSAGE, download_url=_WIREGUARD_DOWNLOAD_URL)
-    return DependencyStatus(available=True, message="WireGuard for Windows detected.")
+        return DependencyStatus(available=False, message=_MISSING_MESSAGE)
+    return DependencyStatus(available=True, message="ready")

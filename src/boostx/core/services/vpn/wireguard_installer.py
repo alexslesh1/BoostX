@@ -1,12 +1,20 @@
-"""Downloads and silently installs WireGuard for Windows, so the user is
-never asked to go install it manually. Only triggered when
-wireguard_dependency.find_wireguard_executable() finds nothing.
+"""Downloads and silently installs the VPN routing component (WireGuard
+for Windows) so the user is never asked to go install anything manually.
+Only triggered when wireguard_dependency.find_wireguard_executable()
+finds nothing. Runs entirely without prompts on our side — no dialog,
+no name of the underlying technology anywhere in what the user sees;
+the only thing Windows itself still shows is its own UAC elevation
+prompt, which we cannot suppress or relabel (see authenticode.py for why
+we deliberately don't touch the downloaded binary to try to disguise it).
 
 Downloaded, not bundled: the official installer is a self-contained
 bootstrapper (not a bare MSI — it fetches/verifies/installs the real
-package itself), refreshed on every WireGuard release, so downloading at
-first-use keeps users on a current, patched build instead of whatever
-version happened to ship with our app.
+package itself), refreshed on every release, so downloading at first-use
+keeps users on a current, patched build instead of whatever version
+happened to ship with our app. The on-disk filename is our own choice
+(renaming a signed binary doesn't touch its signature or its embedded
+publisher metadata — see authenticode.py) so Task Manager shows our own
+neutral name, not the vendor's, during the few seconds it runs.
 """
 from __future__ import annotations
 
@@ -25,13 +33,16 @@ from boostx.core.services.vpn.authenticode import verify_authenticode_signature
 from boostx.core.services.vpn.wireguard_dependency import find_wireguard_executable
 
 _INSTALLER_URL = "https://download.wireguard.com/windows-client/wireguard-installer.exe"
+_INSTALLER_FILENAME = "boostx-component-setup.exe"
 _DOWNLOAD_TIMEOUT_S = 60.0
 _INSTALL_TIMEOUT_S = 120.0
 _POST_INSTALL_POLL_INTERVAL_S = 0.5
 _POST_INSTALL_TIMEOUT_S = 15.0
 
+_GENERIC_FAILURE_MESSAGE = "Setup couldn't finish. Please check your internet connection and try again."
 
-class WireguardInstallError(Exception):
+
+class ComponentInstallError(Exception):
     pass
 
 
@@ -41,16 +52,17 @@ class InstallProgress:
 
 
 def _installer_path() -> Path:
-    return AppPaths.data_dir() / "wireguard-installer.exe"
+    return AppPaths.data_dir() / _INSTALLER_FILENAME
 
 
 def install_wireguard(on_progress: Callable[[InstallProgress], None] | None = None) -> Path:
-    """Downloads, verifies, and silently installs WireGuard for Windows.
-    Returns the path to the now-installed wireguard.exe. Raises
-    WireguardInstallError on any failure — never leaves the system in a
-    half-elevated, ambiguous state without a clear error."""
+    """Downloads, verifies, and silently installs the VPN routing
+    component. Returns the path to the now-installed executable. Raises
+    ComponentInstallError with a generic, non-technical message on any
+    failure — never leaves the system in a half-elevated, ambiguous
+    state without a clear (if unspecific) error."""
     if sys.platform != "win32":  # pragma: no cover - Windows-only feature
-        raise WireguardInstallError("WireGuard auto-install is only available on Windows.")
+        raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE)
 
     def _report(stage: str) -> None:
         if on_progress is not None:
@@ -62,16 +74,15 @@ def install_wireguard(on_progress: Callable[[InstallProgress], None] | None = No
     _report("verifying")
     if not verify_authenticode_signature(installer_path):
         installer_path.unlink(missing_ok=True)
-        raise WireguardInstallError(
-            "The downloaded WireGuard installer failed signature verification and was discarded."
-        )
+        logger.error("Downloaded setup component failed signature verification; discarded.")
+        raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE)
 
     _report("installing")
     _run_elevated_silent_install(installer_path)
 
     executable = _wait_for_install(_POST_INSTALL_TIMEOUT_S)
     if executable is None:
-        raise WireguardInstallError("WireGuard installation did not complete — please try again.")
+        raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE)
 
     _report("done")
     return executable
@@ -87,7 +98,8 @@ def _download_installer() -> Path:
                     f.write(chunk)
     except httpx.HTTPError as exc:
         target.unlink(missing_ok=True)
-        raise WireguardInstallError(f"Failed to download the WireGuard installer: {exc}") from exc
+        logger.warning(f"Component download failed: {exc}")
+        raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE) from exc
     return target
 
 
@@ -106,11 +118,8 @@ def _run_elevated_silent_install(installer_path: Path) -> None:
         timeout=_INSTALL_TIMEOUT_S,
     )
     if result.returncode != 0:
-        logger.warning(f"WireGuard installer exited {result.returncode}: {result.stderr.strip()}")
-        raise WireguardInstallError(
-            f"The WireGuard installer exited with code {result.returncode}. "
-            "The UAC prompt may have been declined."
-        )
+        logger.warning(f"Component setup exited {result.returncode}: {result.stderr.strip()}")
+        raise ComponentInstallError(_GENERIC_FAILURE_MESSAGE)
 
 
 def _wait_for_install(timeout_s: float) -> Path | None:
