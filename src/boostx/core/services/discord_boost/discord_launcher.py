@@ -25,6 +25,22 @@ def launch_discord(executable_path: Path, local_socks_port: int) -> bool:
         return False
 
 
+def launch_discord_plain(executable_path: Path) -> bool:
+    """Launches Discord with no proxy configuration at all. The
+    WinDivert-based VPN (core/services/interception) redirects Discord's
+    traffic transparently at the packet level, so unlike `launch_discord`
+    above (the SOCKS5-based path), Discord's own process is never given
+    any flag or configuration indicating a proxy exists."""
+    try:
+        if platform.system() == "Darwin" and executable_path.suffix == ".app":
+            subprocess.Popen(["open", str(executable_path)])
+        else:
+            subprocess.Popen([str(executable_path)], cwd=str(executable_path.parent))
+        return True
+    except OSError:
+        return False
+
+
 def _find_windows() -> Path | None:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:

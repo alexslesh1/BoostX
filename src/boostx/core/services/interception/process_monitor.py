@@ -21,7 +21,7 @@ from loguru import logger
 
 from boostx.core.services.interception.app_registry import InterceptedApp
 
-_POLL_INTERVAL_S = 1.0
+_POLL_INTERVAL_S = 0.3
 
 
 def find_matching_pids(app: InterceptedApp) -> set[int]:
