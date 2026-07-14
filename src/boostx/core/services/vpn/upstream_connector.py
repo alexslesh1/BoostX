@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from loguru import logger
 
+from boostx.core.services.net.tcp_keepalive import enable_tcp_keepalive
 from boostx.core.services.vpn.interface_binding import bind_socket_to_interface
 from boostx.core.services.vpn.tunnel_manager import is_tunnel_service_running
 
@@ -45,4 +46,10 @@ class WireguardUpstreamConnector:
             )
             raise
         sock.settimeout(None)
+        # Discord's gateway (and anything else long-lived/WebSocket-like)
+        # is quiet between app-level heartbeats for tens of seconds — long
+        # enough for a stateful middlebox on the real network path to drop
+        # the idle mapping before either endpoint notices. Keepalive keeps
+        # that state refreshed instead of waiting to find out the hard way.
+        enable_tcp_keepalive(sock)
         return sock
