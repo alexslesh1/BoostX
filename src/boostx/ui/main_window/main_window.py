@@ -83,15 +83,15 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._component_setup_controller.run_if_needed()
 
     def _register_pages(self) -> None:
-        dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
+        self._dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
-        dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
+        self._dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
         self._cleaner_page = CleanerPage(self._stack)
         self._tweaks_page = TweaksPage(self._stack)
 
         pages = {
-            0: dashboard_page,
+            0: self._dashboard_page,
             1: MonitorPage(self._monitor_controller, self._stack),
             2: BoostPage(
                 self._boost_service,
@@ -151,6 +151,11 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._title_bar.set_maximized(self.isMaximized())
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        # All background pollers that touch _boost_repository (directly or
+        # via _boost_service) must be stopped before it's closed below —
+        # otherwise a still-running timer keeps hitting a closed sqlite3
+        # connection on every tick with no way to stop itself.
+        self._dashboard_page.shutdown()
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
         self._discord_vpn_controller.shutdown()

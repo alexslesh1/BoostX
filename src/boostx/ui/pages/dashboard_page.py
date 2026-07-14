@@ -53,6 +53,13 @@ class DashboardPage(BasePage):
         self._connections_timer.start()
         self._refresh_connections()
 
+    def shutdown(self) -> None:
+        # Must run before whatever owns the underlying DB connection
+        # (BoostService/BoostRepository) closes it — otherwise this timer
+        # keeps firing _refresh_connections against a closed sqlite3
+        # connection every tick, indefinitely, since nothing else stops it.
+        self._connections_timer.stop()
+
     def _build_body(self, layout: QVBoxLayout) -> None:
         icons_dir = AppPaths.icons_dir() / "stats"
 
