@@ -23,6 +23,8 @@ from loguru import logger
 
 import pydivert
 
+from boostx.core.services.interception.windivert_bootstrap import ensure_local_windivert_binaries
+
 # WINDIVERT_EVENT_* (windivert.h). Only BIND/CONNECT populate LocalPort
 # meaningfully for our purposes; CLOSE is what tears an entry back down.
 _EVENT_SOCKET_BIND = 3
@@ -84,6 +86,7 @@ class SocketLayerMonitor:
     def update_pids(self, pids: set[int]) -> None:
         if sys.platform != "win32":  # pragma: no cover - Windows-only feature
             raise OSError("SocketLayerMonitor is only available on Windows")
+        ensure_local_windivert_binaries()
         if pids == self._pids:
             return
         self._pids = set(pids)

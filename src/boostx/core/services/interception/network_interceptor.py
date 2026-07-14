@@ -29,6 +29,7 @@ import pydivert
 
 from boostx.core.services.interception.packet_redirect import redirect_to_local_relay
 from boostx.core.services.interception.redirect_table import RedirectTable
+from boostx.core.services.interception.windivert_bootstrap import ensure_local_windivert_binaries
 
 _FILTER = "outbound and tcp"
 _IDLE_SWEEP_INTERVAL_S = 5.0
@@ -55,6 +56,7 @@ class NetworkInterceptor:
     def start(self) -> None:
         if sys.platform != "win32":  # pragma: no cover - Windows-only feature
             raise OSError("NetworkInterceptor is only available on Windows")
+        ensure_local_windivert_binaries()
         self._stop_event.clear()
         handle = pydivert.WinDivert(_FILTER, layer=pydivert.Layer.NETWORK)
         handle.open()
