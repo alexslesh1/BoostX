@@ -47,13 +47,16 @@ class RedirectTable:
 
     def get_or_create(
         self, protocol: str, client_ip: str, client_port: int, real_dst_ip: str, real_dst_port: int
-    ) -> RedirectEntry:
+    ) -> tuple[RedirectEntry, bool]:
+        """Returns (entry, created) — `created` is True only the first
+        time this exact flow is seen, so a caller can log a "redirect
+        happened" line exactly once per flow instead of once per packet."""
         key = (protocol, client_ip, client_port)
         with self._lock:
             entry = self._entries.get(key)
             if entry is not None:
                 entry.last_seen = time.monotonic()
-                return entry
+                return entry, False
             entry = RedirectEntry(
                 protocol=protocol,
                 client_ip=client_ip,
@@ -63,7 +66,7 @@ class RedirectTable:
                 last_seen=time.monotonic(),
             )
             self._entries[key] = entry
-            return entry
+            return entry, True
 
     def lookup(self, protocol: str, client_ip: str, client_port: int) -> RedirectEntry | None:
         with self._lock:

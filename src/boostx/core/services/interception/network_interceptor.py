@@ -101,13 +101,22 @@ class NetworkInterceptor:
             handle.send(packet)
             return
 
-        self._redirect_table.get_or_create(
+        entry, created = self._redirect_table.get_or_create(
             protocol="tcp",
             client_ip=packet.src_addr,
             client_port=packet.src_port,
             real_dst_ip=packet.dst_addr,
             real_dst_port=packet.dst_port,
         )
+        if created:
+            # The concrete, one-line-per-flow confirmation that a
+            # redirect actually happened — this is the log line to look
+            # for when verifying the interceptor is doing anything at all.
+            logger.info(
+                f"NetworkInterceptor: redirect table hit — "
+                f"{entry.client_ip}:{entry.client_port} -> {entry.real_dst_ip}:{entry.real_dst_port} "
+                f"redirected to local relay port {self._relay_port}"
+            )
         redirect_to_local_relay(packet, self._relay_port)
         handle.send(packet)
 
