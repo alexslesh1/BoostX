@@ -11,6 +11,7 @@ from boostx.core.services.monitor.system_monitor_service import SystemMonitorSer
 from boostx.core.services.vpn.vpn_coordinator import VpnCoordinator
 from boostx.ui.components.sidebar.sidebar import Sidebar
 from boostx.ui.components.title_bar.title_bar import TitleBar
+from boostx.ui.controllers.app_boost_controller import AppBoostController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
 from boostx.ui.controllers.component_setup_controller import ComponentSetupController
 from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
@@ -24,8 +25,8 @@ from boostx.ui.pages.about_page import AboutPage
 from boostx.ui.pages.account_page import AccountPage
 from boostx.ui.pages.boost_page import BoostPage
 from boostx.ui.pages.cleaner_page import CleanerPage
-from boostx.ui.pages.dashboard_page import DashboardPage
-from boostx.ui.pages.monitor_page import MonitorPage
+from boostx.ui.pages.connection_page import ConnectionPage
+from boostx.ui.pages.home_page import HomePage
 from boostx.ui.pages.settings_page import SettingsPage
 from boostx.ui.pages.tweaks_page import TweaksPage
 
@@ -55,6 +56,13 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._telegram_vpn_controller = TelegramVpnController(
             self._session_manager, self._vpn_coordinator, parent=self
         )
+        self._app_boost_controller = AppBoostController(
+            self._boost_service,
+            self._boost_sequence_controller,
+            self._discord_vpn_controller,
+            self._telegram_vpn_controller,
+            parent=self,
+        )
 
         self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
@@ -83,23 +91,40 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._component_setup_controller.run_if_needed()
 
     def _register_pages(self) -> None:
-        self._dashboard_page = DashboardPage(self._monitor_controller, self._boost_service, self._stack)
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
-        self._dashboard_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
+        connection_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "connection")
+
+        self._home_page = HomePage(
+            self._monitor_controller, self._boost_service, self._app_boost_controller, self._stack
+        )
+
+        self._boost_page = BoostPage(
+            self._boost_service,
+            self._boost_sequence_controller,
+            self._discord_vpn_controller,
+            self._telegram_vpn_controller,
+            self._stack,
+        )
+        # Once the user actually starts a boost from the Boost page, jump to
+        # Connection so they immediately see its live status there.
+        self._boost_sequence_controller.sequence_finished.connect(
+            lambda success: self._sidebar.select_page(connection_page_index) if success else None
+        )
+        self._discord_vpn_controller.started.connect(lambda: self._sidebar.select_page(connection_page_index))
+        self._telegram_vpn_controller.started.connect(lambda: self._sidebar.select_page(connection_page_index))
+
+        self._connection_page = ConnectionPage(
+            self._monitor_controller, self._boost_service, self._app_boost_controller, self._stack
+        )
+        self._connection_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
         self._cleaner_page = CleanerPage(self._stack)
         self._tweaks_page = TweaksPage(self._stack)
 
         pages = {
-            0: self._dashboard_page,
-            1: MonitorPage(self._monitor_controller, self._stack),
-            2: BoostPage(
-                self._boost_service,
-                self._boost_sequence_controller,
-                self._discord_vpn_controller,
-                self._telegram_vpn_controller,
-                self._stack,
-            ),
+            0: self._home_page,
+            1: self._boost_page,
+            2: self._connection_page,
             3: self._cleaner_page,
             4: self._tweaks_page,
             5: SettingsPage(self._boost_service, self._stack),
@@ -155,7 +180,8 @@ class MainWindow(FramelessWindowMixin, QWidget):
         # via _boost_service) must be stopped before it's closed below —
         # otherwise a still-running timer keeps hitting a closed sqlite3
         # connection on every tick with no way to stop itself.
-        self._dashboard_page.shutdown()
+        self._connection_page.shutdown()
+        self._app_boost_controller.shutdown()
         self._monitor_controller.shutdown()
         self._boost_sequence_controller.shutdown()
         self._discord_vpn_controller.shutdown()

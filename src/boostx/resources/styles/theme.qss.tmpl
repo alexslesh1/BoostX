@@ -240,6 +240,58 @@ QLabel#ChartEmptyState {
     font-size: ${SIZE_SMALL}px;
 }
 
+QFrame#AppToggleCard {
+    background-color: ${CARD};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS}px;
+}
+
+QLabel#AppToggleCardName {
+    color: ${TEXT};
+    font-size: ${SIZE_BODY}px;
+    font-weight: 600;
+}
+
+QLabel#AppToggleCardMode {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QPushButton#AppTogglesAddButton {
+    background-color: transparent;
+    border: 1px dashed ${BORDER};
+    border-radius: ${RADIUS}px;
+    color: ${TEXT_SECONDARY};
+    font-size: 28px;
+    font-weight: 400;
+}
+
+QPushButton#AppTogglesAddButton:hover {
+    border-color: ${PRIMARY};
+    color: ${PRIMARY};
+}
+
+QWidget#ConnectionTableHeader {
+    background: transparent;
+}
+
+QLabel#ConnectionTableHeaderLabel {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+QWidget#ConnectionTableRow {
+    background: transparent;
+}
+
+QFrame#ConnectionRowDivider {
+    background-color: ${BORDER};
+    max-height: 1px;
+    border: none;
+}
+
 QLabel#GamesStatusLabel {
     color: ${TEXT_SECONDARY};
     font-size: ${SIZE_BODY}px;

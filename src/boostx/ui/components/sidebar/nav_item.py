@@ -9,9 +9,9 @@ class NavItem:
 
 
 NAV_ITEMS: list[NavItem] = [
-    NavItem(key="dashboard", label="Dashboard", page_index=0),
-    NavItem(key="monitor", label="Monitor", page_index=1),
-    NavItem(key="boost", label="Boost", page_index=2),
+    NavItem(key="home", label="Home", page_index=0),
+    NavItem(key="boost", label="Boost", page_index=1),
+    NavItem(key="connection", label="Connection", page_index=2),
     NavItem(key="cleaner", label="Cleaner", page_index=3),
     NavItem(key="tweaks", label="Tweaks", page_index=4),
     NavItem(key="settings", label="Settings", page_index=5),

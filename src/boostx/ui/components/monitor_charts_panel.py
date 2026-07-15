@@ -14,26 +14,25 @@ from boostx.config.palette import Palette
 from boostx.core.services.monitor.system_snapshot import SystemSnapshot
 from boostx.ui.components.charts.line_chart_card import LineChartCard, SeriesSpec
 from boostx.ui.controllers.monitor_controller import MonitorController
-from boostx.ui.pages.base_page import BasePage
 
 _INTERVAL_OPTIONS_MS = (250, 500, 1000, 2000)
 _DEFAULT_INTERVAL_MS = 500
 
 
-class MonitorPage(BasePage):
+class MonitorChartsPanel(QWidget):
+    """The full CPU/GPU/RAM/disk/network chart grid + toolbar, previously
+    MonitorPage's own body. Extracted into a plain widget (rather than a
+    BasePage) so it can be embedded inside HomePage now that Monitor is no
+    longer a separate nav destination, without duplicating this code."""
+
     def __init__(self, monitor_controller: MonitorController, parent: QWidget | None = None) -> None:
-        # Must be assigned before super().__init__(), since it triggers _build_body() synchronously.
+        super().__init__(parent)
         self._monitor_controller = monitor_controller
         self._is_paused = False
-        super().__init__(
-            title="Monitor",
-            subtitle="Full CPU, GPU, RAM, disk and network monitoring",
-            parent=parent,
-        )
-        self._monitor_controller.snapshot_updated.connect(self._on_snapshot)
 
-    def _build_body(self, layout: QVBoxLayout) -> None:
         palette = Palette()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         toolbar = QHBoxLayout()
         self._pause_button = QPushButton("Pause", self)
@@ -90,6 +89,7 @@ class MonitorPage(BasePage):
         layout.addWidget(scroll_area, stretch=1)
 
         self._gpu_chart.show_empty_state("GPU not detected")
+        self._monitor_controller.snapshot_updated.connect(self._on_snapshot)
 
     def _toggle_pause(self) -> None:
         if self._is_paused:
