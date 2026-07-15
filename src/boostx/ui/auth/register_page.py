@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from boostx.core.services.api.exceptions import ApiError
 from boostx.core.services.api.session_manager import SessionManager
+from boostx.i18n import i18n
 from boostx.ui.auth.auth_form_page import AuthFormPage
 from boostx.ui.auth.form_fields import add_field
 
@@ -16,35 +17,45 @@ class RegisterPage(AuthFormPage):
     def __init__(self, session_manager: SessionManager, parent: QWidget | None = None) -> None:
         self._session_manager = session_manager
         super().__init__(
-            title="Create your account",
-            subtitle="Sign up to sync your Nexora settings and subscription",
+            title=i18n.tr("auth.create_account_title"),
+            subtitle=i18n.tr("auth.create_account_subtitle"),
             parent=parent,
         )
+        i18n.language_changed.connect(self._retranslate)
 
     def _build_form(self, layout: QVBoxLayout) -> None:
-        self._username_field = add_field(layout, self, "Username")
-        self._email_field = add_field(layout, self, "Email")
-        self._password_field = add_field(layout, self, "Password", is_password=True)
+        self._username_field = add_field(layout, self, i18n.tr("auth.username"))
+        self._email_field = add_field(layout, self, i18n.tr("auth.email"))
+        self._password_field = add_field(layout, self, i18n.tr("auth.password"), is_password=True)
 
-        self._submit_button = QPushButton("Create Account", self)
+        self._submit_button = QPushButton(i18n.tr("auth.create_account_button"), self)
         self._submit_button.setObjectName("AuthPrimaryButton")
         self._submit_button.clicked.connect(self._on_submit)
         layout.addWidget(self._submit_button)
 
-        login_button = QPushButton("Already have an account? Log in", self)
-        login_button.setObjectName("AuthLinkButton")
-        login_button.clicked.connect(self.login_requested.emit)
-        layout.addWidget(login_button)
+        self._login_button = QPushButton(i18n.tr("auth.have_account"), self)
+        self._login_button.setObjectName("AuthLinkButton")
+        self._login_button.clicked.connect(self.login_requested.emit)
+        layout.addWidget(self._login_button)
+
+    def _retranslate(self, *_args: object) -> None:
+        self.set_title(i18n.tr("auth.create_account_title"))
+        self.set_subtitle(i18n.tr("auth.create_account_subtitle"))
+        self._username_field.label.setText(i18n.tr("auth.username"))
+        self._email_field.label.setText(i18n.tr("auth.email"))
+        self._password_field.label.setText(i18n.tr("auth.password"))
+        self._submit_button.setText(i18n.tr("auth.create_account_button"))
+        self._login_button.setText(i18n.tr("auth.have_account"))
 
     def _on_submit(self) -> None:
         username = self._username_field.text().strip()
         email = self._email_field.text().strip()
         password = self._password_field.text()
         if not username or not email or not password:
-            self.show_error("Fill in all fields.")
+            self.show_error(i18n.tr("auth.fill_all_fields"))
             return
         if len(password) < _MIN_PASSWORD_LENGTH:
-            self.show_error(f"Password must be at least {_MIN_PASSWORD_LENGTH} characters.")
+            self.show_error(i18n.tr("auth.password_min_length", min_length=_MIN_PASSWORD_LENGTH))
             return
         self.clear_messages()
         self._submit_button.setEnabled(False)

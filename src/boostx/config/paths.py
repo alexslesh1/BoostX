@@ -42,6 +42,10 @@ class AppPaths:
         return cls.resources_dir() / "styles"
 
     @classmethod
+    def images_dir(cls) -> Path:
+        return cls.resources_dir() / "images"
+
+    @classmethod
     def scripts_dir(cls) -> Path:
         return cls.resources_dir() / "scripts"
 

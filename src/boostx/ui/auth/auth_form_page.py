@@ -16,14 +16,14 @@ class AuthFormPage(QWidget):
         card_layout.setContentsMargins(32, 32, 32, 32)
         card_layout.setSpacing(10)
 
-        title_label = QLabel(title, card)
-        title_label.setObjectName("AuthTitle")
-        subtitle_label = QLabel(subtitle, card)
-        subtitle_label.setObjectName("AuthSubtitle")
-        subtitle_label.setWordWrap(True)
+        self._title_label = QLabel(title, card)
+        self._title_label.setObjectName("AuthTitle")
+        self._subtitle_label = QLabel(subtitle, card)
+        self._subtitle_label.setObjectName("AuthSubtitle")
+        self._subtitle_label.setWordWrap(True)
 
-        card_layout.addWidget(title_label)
-        card_layout.addWidget(subtitle_label)
+        card_layout.addWidget(self._title_label)
+        card_layout.addWidget(self._subtitle_label)
         card_layout.addSpacing(6)
 
         self._build_form(card_layout)
@@ -51,6 +51,12 @@ class AuthFormPage(QWidget):
 
     def _build_form(self, layout: QVBoxLayout) -> None:
         raise NotImplementedError
+
+    def set_title(self, text: str) -> None:
+        self._title_label.setText(text)
+
+    def set_subtitle(self, text: str) -> None:
+        self._subtitle_label.setText(text)
 
     def show_error(self, message: str) -> None:
         self.status_label.hide()

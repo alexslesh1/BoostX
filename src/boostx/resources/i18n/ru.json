@@ -1,0 +1,31 @@
+{
+  "loading.status": "Загрузка...",
+
+  "auth.welcome_back": "С возвращением",
+  "auth.login_subtitle": "Войдите в свой аккаунт Nexora",
+  "auth.email": "Email",
+  "auth.password": "Пароль",
+  "auth.remember_me": "Запомнить меня",
+  "auth.log_in": "Войти",
+  "auth.forgot_password": "Забыли пароль?",
+  "auth.no_account": "Нет аккаунта? Зарегистрироваться",
+  "auth.enter_credentials": "Введите email и пароль.",
+
+  "auth.create_account_title": "Создайте аккаунт",
+  "auth.create_account_subtitle": "Зарегистрируйтесь, чтобы синхронизировать настройки и подписку Nexora",
+  "auth.username": "Имя пользователя",
+  "auth.create_account_button": "Создать аккаунт",
+  "auth.have_account": "Уже есть аккаунт? Войти",
+  "auth.fill_all_fields": "Заполните все поля.",
+  "auth.password_min_length": "Пароль должен содержать не менее {min_length} символов.",
+
+  "marketing.headline_top": "МАКСИМУМ FPS",
+  "marketing.headline_mid": "МИНИМУМ",
+  "marketing.headline_bottom": "ЗАДЕРЖКИ",
+  "marketing.subtitle": "Автоматическая оптимизация Windows, сети и оборудования перед каждой игрой.",
+  "marketing.feature_system": "Оптимизация системы",
+  "marketing.feature_network": "Оптимизация сети",
+  "marketing.feature_router": "ИИ-оптимизация маршрутизации",
+
+  "settings.language": "Язык"
+}

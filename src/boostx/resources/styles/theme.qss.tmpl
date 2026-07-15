@@ -397,12 +397,66 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 
 QWidget#AuthWindowRoot {
-    background-color: ${BACKGROUND};
+    background: qradialgradient(cx:0.12, cy:0.08, radius:1.15, fx:0.12, fy:0.08,
+        stop:0 rgba(90, 110, 165, 0.40), stop:0.35 rgba(45, 48, 60, 0.18), stop:1 ${BACKGROUND});
+    border-radius: ${WINDOW_RADIUS}px;
+}
+
+QLabel#AuthBackgroundLabel {
     border-radius: ${WINDOW_RADIUS}px;
 }
 
 QWidget#AuthPage {
     background-color: ${BACKGROUND};
+}
+
+QWidget#MarketingPanel {
+    background: transparent;
+}
+
+QWidget#MarketingFeatureRow {
+    background: transparent;
+}
+
+QLabel#MarketingHeadline {
+    font-size: ${SIZE_JUMBO}px;
+    font-weight: 800;
+}
+
+QLabel#MarketingSubtitle {
+    color: ${TEXT_SECONDARY};
+    font-size: ${SIZE_SUBHEADING}px;
+}
+
+QLabel#MarketingFeatureBullet {
+    color: ${PRIMARY};
+    font-size: ${SIZE_SMALL}px;
+}
+
+QLabel#MarketingFeatureLabel {
+    color: ${TEXT};
+    font-size: ${SIZE_SUBHEADING}px;
+    font-weight: 600;
+}
+
+QFrame#MarketingDivider {
+    background-color: ${BORDER};
+    max-height: 1px;
+    border: none;
+}
+
+QComboBox#LanguageSwitcher {
+    background: transparent;
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SMALL}px;
+    padding: 6px 10px;
+    color: ${TEXT};
+    font-size: ${SIZE_SMALL}px;
+    font-weight: 700;
+}
+
+QComboBox#LanguageSwitcher:hover {
+    border-color: ${PRIMARY};
 }
 
 QLabel#AuthTitle {

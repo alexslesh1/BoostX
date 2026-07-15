@@ -2,7 +2,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from boostx.core.services.boost.boost_service import BoostService
+from boostx.i18n import i18n
 from boostx.ui.components.card import Card
+from boostx.ui.components.language_switcher import LanguageSwitcher
 from boostx.ui.pages.base_page import BasePage
 
 _SCRIPT_FOLDER_SETTING_KEY = "startup_script_folder"
@@ -19,6 +21,19 @@ class SettingsPage(BasePage):
         )
 
     def _build_body(self, layout: QVBoxLayout) -> None:
+        language_card = Card(self)
+        language_layout = QVBoxLayout(language_card)
+        language_layout.setContentsMargins(20, 18, 20, 18)
+        language_layout.setSpacing(10)
+
+        language_title = QLabel(i18n.tr("settings.language"), language_card)
+        language_title.setObjectName("StatCardTitle")
+        language_switcher = LanguageSwitcher(language_card)
+
+        language_layout.addWidget(language_title)
+        language_layout.addWidget(language_switcher, alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(language_card)
+
         card = Card(self)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(20, 18, 20, 18)
