@@ -13,8 +13,8 @@ from boostx.core.services.vpn.wireguard_dependency import check_wireguard
 from boostx.core.services.vpn.wireguard_installer import InstallProgress, install_wireguard
 
 _PROGRESS_TEXT = {
-    "downloading": "Preparing BoostX components...",
-    "verifying": "Preparing BoostX components...",
+    "downloading": "Preparing Nexora components...",
+    "verifying": "Preparing Nexora components...",
     "installing": "Finishing setup...",
     "done": "Ready.",
 }

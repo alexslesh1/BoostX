@@ -15,7 +15,7 @@ class LoginPage(AuthFormPage):
 
     def __init__(self, session_manager: SessionManager, parent: QWidget | None = None) -> None:
         self._session_manager = session_manager
-        super().__init__(title="Welcome back", subtitle="Log in to your BoostX account", parent=parent)
+        super().__init__(title="Welcome back", subtitle="Log in to your Nexora account", parent=parent)
 
     def _build_form(self, layout: QVBoxLayout) -> None:
         self._email_field = add_field(layout, self, "Email")

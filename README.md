@@ -1,4 +1,4 @@
-# BoostX
+# Nexora
 
 System monitor, boost, cleaner and game launcher desktop app (PySide6).
 
@@ -8,7 +8,7 @@ System monitor, boost, cleaner and game launcher desktop app (PySide6).
 
 ## Account & Backend
 
-BoostX talks to the [BoostX-Server](../BoostX-Server) backend for account
+Nexora talks to the [BoostX-Server](../BoostX-Server) backend for account
 authentication, subscription status and device management. No UI page performs
 HTTP requests directly — everything goes through the service layer in
 `boostx/core/services/api/`:
@@ -23,11 +23,11 @@ HTTP requests directly — everything goes through the service layer in
   (`data/session.json`, `chmod 600` on POSIX). Passwords and access tokens are
   never written to disk.
 
-Configure the backend URL with the `BOOSTX_API_URL` environment variable
+Configure the backend URL with the `NEXORA_API_URL` environment variable
 (defaults to `http://localhost:8000/api/v1`):
 
 ```bash
-export BOOSTX_API_URL=http://localhost:8000/api/v1
+export NEXORA_API_URL=http://localhost:8000/api/v1
 .venv/bin/python -m boostx
 ```
 

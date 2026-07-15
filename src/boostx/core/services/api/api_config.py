@@ -6,7 +6,7 @@ _DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
 def _default_base_url() -> str:
-    return os.environ.get("BOOSTX_API_URL", _DEFAULT_BASE_URL)
+    return os.environ.get("NEXORA_API_URL", _DEFAULT_BASE_URL)
 
 
 @dataclass(frozen=True)

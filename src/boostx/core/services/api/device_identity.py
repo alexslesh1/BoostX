@@ -12,7 +12,7 @@ _DEVICE_ID_FILENAME = "device_id.txt"
 def get_device_info() -> DeviceInfo:
     return DeviceInfo(
         device_id=_load_or_create_device_id(),
-        device_name=platform.node() or "BoostX Desktop",
+        device_name=platform.node() or "Nexora Desktop",
         os=f"{platform.system()} {platform.release()}".strip(),
     )
 

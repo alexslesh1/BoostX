@@ -11,13 +11,13 @@ from loguru import logger
 # Flathub's own Discord packaging script) before adding anything here.
 # The real, working mechanism is two keys in Discord's own settings.json:
 # SKIP_HOST_UPDATE and SKIP_MODULE_UPDATE. This is gated behind an
-# explicit BoostX-side env var (never passed to Discord itself) because,
+# explicit Nexora-side env var (never passed to Discord itself) because,
 # unlike a CLI flag scoped to one process launch, writing these keys
 # persists across every future Discord launch -- including ones outside
-# BoostX -- until manually reverted. That's a reasonable trade for fast
+# Nexora -- until manually reverted. That's a reasonable trade for fast
 # iteration on a test machine but not something to apply to a real user's
 # Discord installation by default.
-_DISABLE_UPDATER_ENV_VAR = "BOOSTX_DISABLE_DISCORD_UPDATER"
+_DISABLE_UPDATER_ENV_VAR = "NEXORA_DISABLE_DISCORD_UPDATER"
 
 
 def find_discord_executable() -> Path | None:

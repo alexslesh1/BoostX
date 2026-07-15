@@ -17,7 +17,7 @@ class RegisterPage(AuthFormPage):
         self._session_manager = session_manager
         super().__init__(
             title="Create your account",
-            subtitle="Sign up to sync your BoostX settings and subscription",
+            subtitle="Sign up to sync your Nexora settings and subscription",
             parent=parent,
         )
 

@@ -34,7 +34,7 @@ from boostx.core.services.vpn.gui_suppressor import suppress_component_gui
 from boostx.core.services.vpn.wireguard_dependency import find_wireguard_executable
 
 _INSTALLER_URL = "https://download.wireguard.com/windows-client/wireguard-installer.exe"
-_INSTALLER_FILENAME = "boostx-component-setup.exe"
+_INSTALLER_FILENAME = "nexora-component-setup.exe"
 _DOWNLOAD_TIMEOUT_S = 60.0
 _INSTALL_TIMEOUT_S = 120.0
 _POST_INSTALL_POLL_INTERVAL_S = 0.5

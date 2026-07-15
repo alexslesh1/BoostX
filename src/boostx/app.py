@@ -10,7 +10,7 @@ from boostx.ui.theme.theme_loader import ThemeLoader
 
 def run() -> int:
     configure_logging()
-    logger.info("Starting BoostX")
+    logger.info("Starting Nexora")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)

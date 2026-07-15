@@ -25,7 +25,7 @@ _PLAN_LABELS = {"free": "Free", "pro": "Pro", "lifetime": "Lifetime"}
 class AccountPage(BasePage):
     def __init__(self, session_manager: SessionManager, parent: QWidget | None = None) -> None:
         self._session_manager = session_manager
-        super().__init__(title="Account", subtitle="Manage your BoostX account", parent=parent)
+        super().__init__(title="Account", subtitle="Manage your Nexora account", parent=parent)
         self._session_manager.auth_state_changed.connect(self._refresh_profile)
         self._refresh_profile()
         self._refresh_devices()

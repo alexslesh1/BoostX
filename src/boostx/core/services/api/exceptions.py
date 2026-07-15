@@ -6,7 +6,7 @@ class ApiError(Exception):
 
 
 class ApiConnectionError(ApiError):
-    def __init__(self, message: str = "Could not reach the BoostX server") -> None:
+    def __init__(self, message: str = "Could not reach the Nexora server") -> None:
         super().__init__(message)
 
 
