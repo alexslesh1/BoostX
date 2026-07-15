@@ -91,6 +91,13 @@ def install_wireguard(on_progress: Callable[[InstallProgress], None] | None = No
 
 def _download_installer() -> Path:
     target = _installer_path()
+    if target.is_file():
+        # Already present (e.g. manually placed when the network blocks
+        # download.wireguard.com specifically) -- skip re-downloading and
+        # let the existing signature-verification step downstream catch a
+        # corrupt or tampered file, same as it would for a fresh download.
+        logger.debug(f"Using existing setup component at {target}, skipping download")
+        return target
     try:
         with httpx.stream("GET", _INSTALLER_URL, timeout=_DOWNLOAD_TIMEOUT_S, follow_redirects=True) as response:
             response.raise_for_status()
