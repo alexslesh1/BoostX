@@ -21,7 +21,10 @@ from typing import Callable
 
 from loguru import logger
 
-import pydivert
+try:
+    import pydivert
+except ImportError:  # pydivert is Windows-only and not installed on other platforms
+    pydivert = None  # type: ignore[assignment]
 
 from boostx.core.services.interception.windivert_bootstrap import ensure_local_windivert_binaries
 

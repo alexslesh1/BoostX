@@ -25,7 +25,10 @@ import threading
 
 from loguru import logger
 
-import pydivert
+try:
+    import pydivert
+except ImportError:  # pydivert is Windows-only and not installed on other platforms
+    pydivert = None  # type: ignore[assignment]
 
 from boostx.core.services.interception.packet_redirect import redirect_to_local_relay
 from boostx.core.services.interception.redirect_table import RedirectTable

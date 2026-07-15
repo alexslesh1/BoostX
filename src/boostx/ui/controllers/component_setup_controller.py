@@ -6,6 +6,8 @@ not even briefly.
 """
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import QObject, Signal
 
 from boostx.core.services.api.api_worker import run_async
@@ -25,6 +27,10 @@ class ComponentSetupController(QObject):
     finished = Signal(bool)
 
     def run_if_needed(self) -> None:
+        if sys.platform != "win32":
+            # No VPN routing component exists for this platform at all --
+            # not even worth a silent no-op progress flash at startup.
+            return
         dependency = check_wireguard()
         if dependency.available:
             return

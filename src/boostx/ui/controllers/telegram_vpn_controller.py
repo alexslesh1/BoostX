@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import QObject, Signal
 
 from boostx.core.services.api.api_worker import run_async
@@ -44,6 +46,12 @@ class TelegramVpnController(QObject):
 
         dependency = check_wireguard()
         if not dependency.available:
+            if sys.platform != "win32":
+                # Nothing to install here at all -- don't attempt it and
+                # don't show a misleading "check your connection"-style
+                # message for what's actually a platform limitation.
+                self.failed.emit(dependency.message)
+                return
             # No prompt, no name of the underlying tech — just quietly try
             # to get ready. Windows' own UAC prompt is unavoidable, but
             # nothing on our side explains what it's for.

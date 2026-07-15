@@ -1,10 +1,12 @@
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from boostx.core.services.vpn.models import DependencyStatus
 
 _MISSING_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
+_UNSUPPORTED_PLATFORM_MESSAGE = "This feature is only available on Windows."
 
 _CANDIDATES = [
     r"C:\Program Files\WireGuard\wireguard.exe",
@@ -29,6 +31,8 @@ def find_wireguard_executable() -> Path | None:
 
 
 def check_wireguard() -> DependencyStatus:
+    if sys.platform != "win32":
+        return DependencyStatus(available=False, message=_UNSUPPORTED_PLATFORM_MESSAGE)
     executable = find_wireguard_executable()
     if executable is None:
         return DependencyStatus(available=False, message=_MISSING_MESSAGE)
