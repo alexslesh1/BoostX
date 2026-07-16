@@ -27,6 +27,7 @@ from boostx.ui.pages.boost_page import BoostPage
 from boostx.ui.pages.cleaner_page import CleanerPage
 from boostx.ui.pages.connection_page import ConnectionPage
 from boostx.ui.pages.dashboard_page import DashboardPage
+from boostx.ui.pages.home_page import HomePage
 from boostx.ui.pages.settings_page import SettingsPage
 from boostx.ui.pages.tweaks_page import TweaksPage
 
@@ -94,6 +95,7 @@ class MainWindow(FramelessWindowMixin, QWidget):
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
         connection_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "connection")
 
+        self._home_page = HomePage(self._stack)
         self._dashboard_page = DashboardPage(self._monitor_controller, self._stack)
 
         self._boost_page = BoostPage(
@@ -120,14 +122,15 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._tweaks_page = TweaksPage(self._stack)
 
         pages = {
-            0: self._dashboard_page,
-            1: self._boost_page,
-            2: self._connection_page,
-            3: self._cleaner_page,
+            0: self._home_page,
+            1: self._connection_page,
+            2: self._boost_page,
+            3: self._dashboard_page,
             4: self._tweaks_page,
-            5: SettingsPage(self._boost_service, self._stack),
+            5: self._cleaner_page,
             6: AccountPage(self._session_manager, self._stack),
-            7: AboutPage(self._stack),
+            7: SettingsPage(self._boost_service, self._stack),
+            8: AboutPage(self._stack),
         }
         for index, page in pages.items():
             self._router.register_page(index, page)
