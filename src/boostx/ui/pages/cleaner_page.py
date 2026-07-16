@@ -2,16 +2,19 @@ from PySide6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from boostx.core.services.cleaner.models import (
     CleanResult,
+    CreateRestorePointResult,
     LargeFileGroup,
     MemoryOptimizationResult,
     ScanResult,
     StartupEntry,
 )
+from boostx.core.services.cleaner.restore_point_service import open_restore_wizard
 from boostx.core.services.cleaner.system_health import disk_health_percent
 from boostx.ui.components.card import Card
 from boostx.ui.components.cleaner.health_card import SystemHealthCard
 from boostx.ui.components.cleaner.large_file_row import LargeFileRow
 from boostx.ui.components.cleaner.memory_card import MemoryOptimizationCard
+from boostx.ui.components.cleaner.restore_point_card import RestorePointCard
 from boostx.ui.components.cleaner.scan_category_card import ScanCategoryCard
 from boostx.ui.components.cleaner.startup_row import StartupRow
 from boostx.ui.components.cleaner.summary_card import CleaningSummaryCard
@@ -45,6 +48,7 @@ class CleanerPage(BasePage):
         self._controller.load_memory_snapshot()
         self._controller.load_startup_entries()
         self._controller.load_large_files()
+        self._controller.load_restore_points()
 
     def _build_body(self, layout: QVBoxLayout) -> None:
         content = QWidget(self)
@@ -56,6 +60,11 @@ class CleanerPage(BasePage):
         self._health_card.scan_requested.connect(self._on_scan_requested)
         self._health_card.clean_requested.connect(self._on_clean_requested)
         content_layout.addWidget(self._health_card)
+
+        self._restore_point_card = RestorePointCard(content)
+        self._restore_point_card.create_requested.connect(self._on_create_restore_point_requested)
+        self._restore_point_card.apply_requested.connect(self._on_apply_restore_point_requested)
+        content_layout.addWidget(self._restore_point_card)
 
         content_layout.addWidget(self._build_scan_results_section(content))
 
@@ -153,6 +162,8 @@ class CleanerPage(BasePage):
         self._controller.startup_entries_ready.connect(self._on_startup_entries_ready)
         self._controller.startup_toggle_finished.connect(self._on_startup_toggle_finished)
         self._controller.large_files_ready.connect(self._on_large_files_ready)
+        self._controller.restore_points_ready.connect(self._restore_point_card.update_status)
+        self._controller.restore_point_created.connect(self._on_restore_point_created)
 
     # -- scan / clean ---------------------------------------------------------
     def _on_scan_requested(self) -> None:
@@ -238,6 +249,19 @@ class CleanerPage(BasePage):
         row = self._startup_rows.get(name)
         if row is not None:
             row.apply_result(enabled, success)
+
+    # -- restore points -----------------------------------------------------------
+    def _on_create_restore_point_requested(self) -> None:
+        self._restore_point_card.set_busy(True)
+        self._controller.create_restore_point()
+
+    def _on_restore_point_created(self, result: CreateRestorePointResult) -> None:
+        self._restore_point_card.set_busy(False)
+        self._restore_point_card.show_result(result)
+        self._controller.load_restore_points()
+
+    def _on_apply_restore_point_requested(self) -> None:
+        open_restore_wizard()
 
     # -- large files --------------------------------------------------------------
     def _on_large_files_ready(self, groups: list[LargeFileGroup]) -> None:

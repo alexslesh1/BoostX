@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 
@@ -76,3 +77,27 @@ class LargeFileGroup:
     path: Path
     size_bytes: int
     item_count: int
+
+
+@dataclass(frozen=True)
+class RestorePoint:
+    sequence_number: int
+    description: str
+    creation_time: datetime
+
+
+@dataclass(frozen=True)
+class RestorePointStatus:
+    points: tuple[RestorePoint, ...]
+
+    @property
+    def latest(self) -> RestorePoint | None:
+        if not self.points:
+            return None
+        return max(self.points, key=lambda point: point.sequence_number)
+
+
+@dataclass(frozen=True)
+class CreateRestorePointResult:
+    success: bool
+    message: str
