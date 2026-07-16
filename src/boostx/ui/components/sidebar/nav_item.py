@@ -9,7 +9,7 @@ class NavItem:
 
 
 NAV_ITEMS: list[NavItem] = [
-    NavItem(key="home", label="Home", page_index=0),
+    NavItem(key="dashboard", label="Dashboard", page_index=0),
     NavItem(key="boost", label="Boost", page_index=1),
     NavItem(key="connection", label="Connection", page_index=2),
     NavItem(key="cleaner", label="Cleaner", page_index=3),
