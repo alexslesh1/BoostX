@@ -107,7 +107,16 @@ class SocketLayerMonitor:
             self._flows = set()
         if not self._pids:
             return
-        handle = pydivert.WinDivert(build_pid_filter(self._pids), layer=pydivert.Layer.SOCKET)
+        # The SOCKET layer is read-only by design (events can only be
+        # observed, never modified/reinjected) -- WinDivertOpen requires
+        # SNIFF and RECV_ONLY to be set for this layer and fails with
+        # WinError 87 (ERROR_INVALID_PARAMETER) otherwise, regardless of
+        # how well-formed the filter string itself is.
+        handle = pydivert.WinDivert(
+            build_pid_filter(self._pids),
+            layer=pydivert.Layer.SOCKET,
+            flags=pydivert.Flag.SNIFF | pydivert.Flag.RECV_ONLY,
+        )
         handle.open()
         self._handle = handle
         thread = threading.Thread(target=self._run, args=(handle,), daemon=True)

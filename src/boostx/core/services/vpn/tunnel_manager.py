@@ -30,6 +30,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from loguru import logger
@@ -70,6 +71,11 @@ _PROBE_TIMEOUT_S = 3.0
 _SCOPED_ROUTE_METRIC = 9999
 _ADDRESS_LINE_PATTERN = re.compile(r"^\s*Address\s*=\s*([0-9.]+)", re.IGNORECASE | re.MULTILINE)
 _GENERIC_FAILURE_MESSAGE = "VPN routing isn't ready yet. Please check your internet connection and try again."
+# The real Win32 error code (ERROR_CANCELLED) a declined/cancelled UAC
+# prompt surfaces as -- used as an unambiguous sentinel so a declined
+# elevation can be told apart from the elevated command itself failing.
+_UAC_DECLINED_EXIT_CODE = 1223
+_OUTPUT_LOG_LIMIT = 4000
 
 
 class TunnelBringUpError(Exception):
@@ -93,19 +99,87 @@ def _prepare_conf(conf_text: str) -> tuple[str, str]:
     return conf_text, local_ip
 
 
-def is_tunnel_service_running() -> bool:
+def _query_service(name: str) -> subprocess.CompletedProcess | None:
     if sys.platform != "win32":  # pragma: no cover - Windows-only feature
-        return False
+        return None
     try:
-        result = subprocess.run(
-            ["sc", "query", _SERVICE_NAME],
+        return subprocess.run(
+            ["sc", "query", name],
             capture_output=True,
             text=True,
             timeout=_SERVICE_QUERY_TIMEOUT_S,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0 and "RUNNING" in result.stdout
+        return None
+
+
+def _ps_literal(value: str) -> str:
+    """A PowerShell single-quoted string literal -- single quotes only need
+    doubling to escape, unlike double-quoted strings which also expand
+    variables, making this the safer choice for arbitrary values (paths,
+    conf contents) that must not be interpreted."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _build_elevated_payload_script(executable: str, args: list[str], output_path: Path) -> str:
+    """A script that runs as the actual elevated process: invokes the real
+    target command, captures its combined output to a file (its own exit
+    code is preserved via $LASTEXITCODE, unaffected by that redirection),
+    and exits with that real exit code."""
+    argument_literals = " ".join(_ps_literal(arg) for arg in args)
+    return (
+        "$ErrorActionPreference = 'Continue'\n"
+        f"& {_ps_literal(executable)} {argument_literals} 2>&1 | "
+        f"Out-File -FilePath {_ps_literal(str(output_path))} -Encoding utf8\n"
+        "exit $LASTEXITCODE\n"
+    )
+
+
+def _build_elevation_wrapper_command(payload_path: Path) -> str:
+    """Elevates just the payload script above. Wrapped in try/catch so a
+    declined/cancelled UAC prompt -- which makes Start-Process itself throw
+    rather than return a process object -- exits with the real Win32
+    ERROR_CANCELLED code instead of being indistinguishable from the
+    elevated command's own failure."""
+    script_args = ",".join(["'-NoProfile'", "'-ExecutionPolicy'", "'Bypass'", "'-File'", _ps_literal(str(payload_path))])
+    return (
+        "try {\n"
+        f"    $p = Start-Process -FilePath 'powershell' -ArgumentList {script_args} "
+        "-Verb RunAs -WindowStyle Hidden -PassThru -Wait\n"
+        "    exit $p.ExitCode\n"
+        "} catch {\n"
+        f"    $code = {_UAC_DECLINED_EXIT_CODE}\n"
+        "    if ($_.Exception.InnerException -and "
+        "($_.Exception.InnerException.PSObject.Properties.Name -contains 'NativeErrorCode')) {\n"
+        "        $code = $_.Exception.InnerException.NativeErrorCode\n"
+        "    }\n"
+        "    exit $code\n"
+        "}"
+    )
+
+
+def _read_and_truncate(path: Path) -> str:
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace").strip()
+    except OSError:
+        return ""
+    if len(text) > _OUTPUT_LOG_LIMIT:
+        return text[:_OUTPUT_LOG_LIMIT] + "... (truncated)"
+    return text
+
+
+def is_tunnel_service_running() -> bool:
+    result = _query_service(_SERVICE_NAME)
+    return result is not None and result.returncode == 0 and "RUNNING" in result.stdout
+
+
+def is_tunnel_service_registered() -> bool:
+    """True if the service exists at all (installed), regardless of its
+    current state -- a STOPPED-but-still-registered leftover from a crash
+    or a failed bring-up/rollback blocks the next /installtunnelservice
+    just as much as a RUNNING one does."""
+    result = _query_service(_SERVICE_NAME)
+    return result is not None and result.returncode == 0
 
 
 def _probe_route_via_interface(interface_index: int) -> bool:
@@ -152,6 +226,18 @@ class TunnelManager:
         executable = find_wireguard_executable()
         if executable is None:
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
+
+        # A service left registered by a crash, a force-quit, or a rollback
+        # that itself failed to complete blocks /installtunnelservice with
+        # "already installed" just as much as a genuinely running one does
+        # -- our own in-memory self._interface_index (checked above) can't
+        # know about that, since it doesn't survive a restart. Clear it
+        # before every install attempt rather than only reacting to the
+        # resulting error.
+        if is_tunnel_service_registered():
+            logger.info(f"Found a leftover '{_SERVICE_NAME}' service from a previous session; removing it first")
+            self._run_elevated(str(executable), ["/uninstalltunnelservice", _TUNNEL_NAME])
+            self._wait_for_teardown()
 
         patched_conf, local_ip = _prepare_conf(conf_text)
         conf_path = _conf_path()
@@ -259,6 +345,17 @@ class TunnelManager:
         is fire-and-forget). Only this one action needs admin rights —
         everything else in the VPN feature runs unprivileged.
 
+        The elevated command's own stdout/stderr is otherwise invisible to
+        us: Start-Process's -Verb parameter (required for the UAC prompt)
+        uses ShellExecute internally, which is incompatible with
+        -RedirectStandardOutput/-RedirectStandardError. So instead the
+        elevated target itself is a small generated .ps1 payload that
+        redirects its own output to a file, which is then read back here —
+        this is what actually lets a genuine failure inside `executable`
+        (e.g. wireguard.exe's own "already installed" error) be told apart
+        from the elevation step itself failing (UAC declined, surfaced as
+        the real Win32 ERROR_CANCELLED code, 1223).
+
         -WindowStyle Hidden only hints at the *initial* window state of
         the launched process and does not reliably suppress a window a
         GUI app creates itself afterward, so this sweeps for and closes
@@ -268,18 +365,36 @@ class TunnelManager:
         if sys.platform != "win32":  # pragma: no cover - Windows-only feature
             raise TunnelBringUpError(_GENERIC_FAILURE_MESSAGE)
 
-        arg_list = ",".join(f"'{arg}'" for arg in args)
-        command = (
-            f"$p = Start-Process -FilePath '{executable}' -ArgumentList {arg_list} "
-            "-Verb RunAs -WindowStyle Hidden -PassThru -Wait; exit $p.ExitCode"
-        )
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
-            capture_output=True,
-            text=True,
-            timeout=_ELEVATED_ACTION_TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            logger.warning(f"Elevated component action exited {result.returncode}: {result.stderr.strip()}")
-        suppress_component_gui()
-        return result.returncode
+        run_id = uuid.uuid4().hex
+        output_path = AppPaths.data_dir() / f"elevated_output_{run_id}.log"
+        payload_path = AppPaths.data_dir() / f"elevated_payload_{run_id}.ps1"
+        payload_path.write_text(_build_elevated_payload_script(executable, args, output_path), encoding="utf-8")
+
+        try:
+            outer_command = _build_elevation_wrapper_command(payload_path)
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", outer_command],
+                capture_output=True,
+                text=True,
+                timeout=_ELEVATED_ACTION_TIMEOUT_S,
+            )
+            exit_code = result.returncode
+            child_output = _read_and_truncate(output_path)
+            command_desc = f"{executable} {' '.join(args)}"
+
+            if exit_code == _UAC_DECLINED_EXIT_CODE:
+                logger.warning(f"Elevated action '{command_desc}' was not launched -- the UAC prompt was declined or cancelled.")
+            elif exit_code != 0:
+                logger.warning(
+                    f"Elevated action '{command_desc}' exited {exit_code}. "
+                    f"Wrapper stderr: {result.stderr.strip() or '(none)'}. "
+                    f"Command output: {child_output or '(no output captured)'}"
+                )
+            else:
+                logger.debug(f"Elevated action '{command_desc}' succeeded. Output: {child_output or '(none)'}")
+
+            suppress_component_gui()
+            return exit_code
+        finally:
+            payload_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)

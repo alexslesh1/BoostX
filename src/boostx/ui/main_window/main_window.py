@@ -1,3 +1,6 @@
+from collections.abc import Callable
+
+from loguru import logger
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
@@ -181,14 +184,28 @@ class MainWindow(FramelessWindowMixin, QWidget):
         # via _boost_service) must be stopped before it's closed below —
         # otherwise a still-running timer keeps hitting a closed sqlite3
         # connection on every tick with no way to stop itself.
-        self._connection_page.shutdown()
-        self._app_boost_controller.shutdown()
-        self._monitor_controller.shutdown()
-        self._boost_sequence_controller.shutdown()
-        self._discord_vpn_controller.shutdown()
-        self._telegram_vpn_controller.shutdown()
-        self._vpn_coordinator.shutdown()
-        self._cleaner_page.shutdown()
-        self._tweaks_page.shutdown()
-        self._boost_repository.close()
+        #
+        # Each step runs independently (a failure in one, e.g. an already-
+        # torn-down interception handle, must never skip the rest) --
+        # _vpn_coordinator.shutdown() actually tearing down any live
+        # WireGuard tunnel service, and _boost_repository.close(), are the
+        # two steps a stale leftover tunnel/an unclosed DB connection would
+        # come from if either got skipped by an earlier exception.
+        self._safe_shutdown("connection page", self._connection_page.shutdown)
+        self._safe_shutdown("app boost controller", self._app_boost_controller.shutdown)
+        self._safe_shutdown("monitor controller", self._monitor_controller.shutdown)
+        self._safe_shutdown("boost sequence controller", self._boost_sequence_controller.shutdown)
+        self._safe_shutdown("discord VPN controller", self._discord_vpn_controller.shutdown)
+        self._safe_shutdown("telegram VPN controller", self._telegram_vpn_controller.shutdown)
+        self._safe_shutdown("VPN coordinator (tunnel teardown)", self._vpn_coordinator.shutdown)
+        self._safe_shutdown("cleaner page", self._cleaner_page.shutdown)
+        self._safe_shutdown("tweaks page", self._tweaks_page.shutdown)
+        self._safe_shutdown("boost repository", self._boost_repository.close)
         super().closeEvent(event)
+
+    @staticmethod
+    def _safe_shutdown(name: str, shutdown: Callable[[], None]) -> None:
+        try:
+            shutdown()
+        except Exception:
+            logger.exception(f"Error shutting down {name} -- continuing with the rest of app teardown")
