@@ -3,12 +3,18 @@ from pathlib import Path
 
 from boostx.core.services.boost.boost_app_status import BoostAppStatus
 from boostx.core.services.boost.boost_repository import BoostRepository
-from boostx.core.services.boost.catalog import DEMO_EXECUTABLE_SENTINEL, build_alias_index, normalize_name
+from boostx.core.services.boost.catalog import (
+    BOOST_CATALOG,
+    DEMO_EXECUTABLE_SENTINEL,
+    build_alias_index,
+    normalize_name,
+)
 from boostx.core.services.boost.running_detector import is_process_running
 from boostx.core.services.boost.well_known_path_detector import discord_detector, telegram_detector
-from boostx.core.services.launcher.process_launcher import launch_executable
+from boostx.core.services.launcher.process_launcher import launch_executable, open_uri
 from boostx.core.services.library.detectors.base import DetectedGame, GameDetector
-from boostx.core.services.library.detectors.epic_detector import EpicDetector
+from boostx.core.services.tunnel.rules import is_specific_folder
+from boostx.core.services.library.detectors.epic_detector import EpicDetector, epic_launch_uri
 from boostx.core.services.library.detectors.gog_detector import GogDetector
 from boostx.core.services.library.detectors.riot_detector import RiotDetector
 from boostx.core.services.library.detectors.steam_detector import SteamDetector
@@ -91,19 +97,28 @@ class BoostService:
         if status.executable_path == DEMO_EXECUTABLE_SENTINEL:
             self._repository.record_launch(app_key)
             return True
-        launched = launch_executable(status.executable_path)
+        uri = epic_launch_uri(status.install_dir) if status.source == "epic" else None
+        launched = open_uri(uri) if uri is not None else launch_executable(status.executable_path)
         if launched:
             self._repository.record_launch(app_key)
         return launched
 
     def get_running_app_keys(self) -> set[str]:
+        """An app counts as running if its launch exe, one of the processes
+        that carry its traffic (network_exes) or any program in its own
+        install folder is running. Launchers often exit as soon as the game
+        is up, so the launch exe alone would say the game had closed."""
+        network_exes = {entry.key: entry.network_exes for entry in BOOST_CATALOG}
         running: set[str] = set()
         for app_key, status in self._repository.get_all_statuses().items():
             if not status.installed or not status.executable_path:
                 continue
             if status.executable_path == DEMO_EXECUTABLE_SENTINEL:
                 continue
-            if is_process_running(status.executable_path):
+            install_dir = status.install_dir if status.install_dir and is_specific_folder(status.install_dir) else None
+            if is_process_running(
+                status.executable_path, extra_names=network_exes.get(app_key, ()), install_dir=install_dir
+            ):
                 running.add(app_key)
         return running
 

@@ -1,6 +1,22 @@
+import os
 import platform
 import subprocess
 from pathlib import Path
+
+
+def open_uri(uri: str) -> bool:
+    """Hands a URI (e.g. com.epicgames.launcher://...) to the program
+    registered for it."""
+    try:
+        if platform.system() == "Windows":
+            os.startfile(uri)  # noqa: S606 - the URI is built by us, not user input
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", uri])
+        else:
+            subprocess.Popen(["xdg-open", uri])
+        return True
+    except OSError:
+        return False
 
 
 def launch_executable(executable_path: str) -> bool:
