@@ -10,6 +10,7 @@ class AppController(QObject):
     def __init__(self) -> None:
         super().__init__()
         self.session_manager = SessionManager()
+        logger.info(f"Backend: {self.session_manager.server_url}")
         self._auth_window: AuthWindow | None = None
         self._main_window: MainWindow | None = None
 

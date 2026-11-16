@@ -45,8 +45,8 @@ class ApiClient:
         try:
             response = self._client.request(method, path, json=json, headers=headers)
         except httpx.RequestError as exc:
-            logger.warning(f"API request failed: {method} {path}: {exc}")
-            raise ApiConnectionError() from exc
+            logger.warning(f"API request failed: {method} {self._config.base_url}{path}: {exc!r}")
+            raise ApiConnectionError(f"Could not reach the Nexora server ({self._config.base_url})") from exc
 
         if response.status_code >= 400:
             detail = self._extract_detail(response)
@@ -56,6 +56,10 @@ class ApiClient:
                 detail=detail,
             )
         return response
+
+    @property
+    def base_url(self) -> str:
+        return self._config.base_url
 
     @staticmethod
     def _extract_detail(response: httpx.Response) -> str | None:

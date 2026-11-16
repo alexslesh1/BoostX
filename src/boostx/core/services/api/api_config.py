@@ -24,14 +24,14 @@ def _override_from_file() -> str | None:
 
 
 def _default_base_url() -> str:
-    """In order: NEXORA_API_URL, api_url.txt beside the exe, the address
-    baked into the build, the local development server."""
-    url = (
-        os.environ.get("NEXORA_API_URL")
-        or _override_from_file()
-        or build_config.DEFAULT_API_URL
-        or _LOCAL_BASE_URL
-    )
+    """A packaged exe uses api_url.txt beside it, else the address baked
+    into the build: an NEXORA_API_URL left over from development on that PC
+    must not silently send it somewhere else. Running from source uses
+    NEXORA_API_URL, else the baked address, else the local dev server."""
+    if getattr(sys, "frozen", False):
+        url = _override_from_file() or build_config.DEFAULT_API_URL or _LOCAL_BASE_URL
+    else:
+        url = os.environ.get("NEXORA_API_URL") or build_config.DEFAULT_API_URL or _LOCAL_BASE_URL
     return url.rstrip("/")
 
 

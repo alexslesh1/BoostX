@@ -96,8 +96,12 @@ class MainWindow(FramelessWindowMixin, QWidget):
 
         self._title_bar = TitleBar("Nexora", self)
         self._offline_banner = QLabel(
-            "Offline — showing cached data. Changes will sync when reconnected.", self
+            "Offline — can't reach the Nexora server "
+            f"({self._session_manager.server_url}). Showing cached data; retrying every 30 s.",
+            self,
         )
+        self._offline_banner.setWordWrap(True)
+        self._offline_banner.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._offline_banner.setObjectName("OfflineBanner")
         self._offline_banner.setVisible(self._session_manager.is_offline)
         self._session_manager.offline_changed.connect(self._offline_banner.setVisible)

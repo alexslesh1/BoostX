@@ -92,7 +92,29 @@ def test_api_url_order_env_then_file_then_build_default(monkeypatch, tmp_path: P
     assert api_config.ApiConfig().base_url == "http://203.0.113.10:8000/api/v1"
 
     monkeypatch.setenv("NEXORA_API_URL", "http://env.example:9000/api/v1")
-    assert api_config.ApiConfig().base_url == "http://env.example:9000/api/v1"
+    assert api_config.ApiConfig().base_url == "http://203.0.113.10:8000/api/v1", "a leftover env var must not win in an exe"
+    (tmp_path / "api_url.txt").unlink()
+    assert api_config.ApiConfig().base_url == "http://198.51.100.7:8000/api/v1"
+
+    monkeypatch.setattr(sys, "frozen", False)
+    assert api_config.ApiConfig().base_url == "http://env.example:9000/api/v1", "from source, the env var is the dev switch"
+
+
+def test_connection_error_names_the_server(monkeypatch):
+    import httpx
+    import pytest as _pytest
+
+    from boostx.core.services.api.api_client import ApiClient
+    from boostx.core.services.api.api_config import ApiConfig
+    from boostx.core.services.api.exceptions import ApiConnectionError
+
+    client = ApiClient(ApiConfig(base_url="http://203.0.113.10:8000/api/v1"))
+    client._client = httpx.Client(
+        base_url="http://203.0.113.10:8000/api/v1",
+        transport=httpx.MockTransport(lambda request: (_ for _ in ()).throw(httpx.ConnectTimeout("timed out"))),
+    )
+    with _pytest.raises(ApiConnectionError, match=r"203\.0\.113\.10:8000"):
+        client.request("GET", "/health")
 
 
 def test_logging_works_without_a_console(monkeypatch, tmp_path: Path):

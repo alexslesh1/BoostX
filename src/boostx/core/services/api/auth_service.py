@@ -16,6 +16,10 @@ class AuthService:
     def __init__(self, client: ApiClient) -> None:
         self._client = client
 
+    @property
+    def server_url(self) -> str:
+        return self._client.base_url
+
     def register(self, username: str, email: str, password: str) -> None:
         self._client.request(
             "POST",

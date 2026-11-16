@@ -84,6 +84,10 @@ class SessionManager(QObject):
     def access_token(self) -> str | None:
         return self._access_token
 
+    @property
+    def server_url(self) -> str:
+        return getattr(self._auth_service, "server_url", "")
+
     # -- startup ------------------------------------------------------------
     def try_restore_session(self, on_done: Callable[[bool], None]) -> None:
         refresh_token = self._token_storage.load_refresh_token()
