@@ -129,8 +129,8 @@ def _write_checkpoint_script() -> Path:
     # Written under AppPaths.data_dir() rather than the OS temp dir --
     # a script on a redirected/virtualized temp path has previously
     # failed to load correctly for an elevated child process on this
-    # project (see windivert_bootstrap.py), so this reuses the same
-    # guaranteed-local, per-user directory instead.
+    # project, so this uses a guaranteed-local, per-user directory
+    # instead.
     script_path = AppPaths.data_dir() / _SCRIPT_FILENAME
     script_path.write_text(
         "$ErrorActionPreference = 'Stop'\n"

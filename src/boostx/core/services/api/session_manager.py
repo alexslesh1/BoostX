@@ -19,6 +19,7 @@ from boostx.core.services.api.models import (
 )
 from boostx.core.services.api.profile_cache import ProfileCache
 from boostx.core.services.api.token_storage import TokenStorage
+from boostx.core.services.tunnel.models import RelaySession
 
 _OFFLINE_RETRY_INTERVAL_MS = 30_000
 _REFRESH_MARGIN_SECONDS = 30
@@ -215,12 +216,15 @@ class SessionManager(QObject):
         token = self._access_token
         run_async(lambda: self._auth_service.get_proxy_credentials(token), on_success, on_error)
 
-    def get_vpn_config(self, on_success: Callable[[str], None], on_error: OnError) -> None:
-        # access_token is kept fresh by _schedule_refresh (silent refresh
-        # ~30s before the 15-minute expiry), so no extra refresh-before-call
-        # logic is needed here — same as get_proxy_credentials.
+    def fetch_relay_session(self) -> RelaySession:
+        """Blocking — called by the tunnel service from its worker thread.
+        access_token is kept fresh by _schedule_refresh (silent refresh
+        ~30s before the 15-minute expiry), so no refresh-before-call logic
+        is needed here."""
         token = self._access_token
-        run_async(lambda: self._auth_service.get_vpn_config(token), on_success, on_error)
+        if token is None:
+            raise ApiError("Not signed in", status_code=401)
+        return self._auth_service.get_relay_session(token, self._device.device_id)
 
     def shutdown(self) -> None:
         self._refresh_timer.stop()

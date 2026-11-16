@@ -11,26 +11,29 @@ class BoostCatalogEntry:
     match_aliases: tuple[str, ...] = field(default_factory=tuple)
     is_demo: bool = False
     is_communication_app: bool = False
+    # Executables that carry the application's traffic, for cases where the
+    # program found on disk is only a launcher that lives somewhere else.
+    network_exes: tuple[str, ...] = field(default_factory=tuple)
 
 
 BOOST_CATALOG: tuple[BoostCatalogEntry, ...] = (
-    BoostCatalogEntry("roblox", "Roblox"),
-    BoostCatalogEntry("minecraft", "Minecraft"),
-    BoostCatalogEntry("fortnite", "Fortnite"),
-    BoostCatalogEntry("league_of_legends", "League of Legends", ("LoL",)),
-    BoostCatalogEntry("gta_v", "Grand Theft Auto V", ("GTA V", "GTA 5", "Grand Theft Auto 5")),
-    BoostCatalogEntry("cod_warzone", "Call of Duty: Warzone", ("Warzone", "COD Warzone")),
-    BoostCatalogEntry("counter_strike_2", "Counter-Strike 2", ("CS2", "CS:GO")),
-    BoostCatalogEntry("dota_2", "Dota 2"),
-    BoostCatalogEntry("pubg_battlegrounds", "PUBG: BATTLEGROUNDS", ("PUBG",)),
-    BoostCatalogEntry("apex_legends", "Apex Legends", ("Apex",)),
-    BoostCatalogEntry("rust", "Rust"),
-    BoostCatalogEntry("delta_force", "Delta Force"),
-    BoostCatalogEntry("marvel_rivals", "Marvel Rivals"),
-    BoostCatalogEntry("dead_by_daylight", "Dead by Daylight", ("DBD",)),
-    BoostCatalogEntry("destiny_2", "Destiny 2"),
-    BoostCatalogEntry("overwatch_2", "Overwatch 2", ("OW2",)),
-    BoostCatalogEntry("deadlock", "Deadlock"),
+    BoostCatalogEntry("roblox", "Roblox", network_exes=("RobloxPlayerBeta.exe",)),
+    BoostCatalogEntry("minecraft", "Minecraft", network_exes=("javaw.exe", "Minecraft.Windows.exe")),
+    BoostCatalogEntry("fortnite", "Fortnite", network_exes=("FortniteClient-Win64-Shipping.exe",)),
+    BoostCatalogEntry("league_of_legends", "League of Legends", ("LoL",), network_exes=("League of Legends.exe",)),
+    BoostCatalogEntry("gta_v", "Grand Theft Auto V", ("GTA V", "GTA 5", "Grand Theft Auto 5"), network_exes=("GTA5.exe", "GTA5_Enhanced.exe")),
+    BoostCatalogEntry("cod_warzone", "Call of Duty: Warzone", ("Warzone", "COD Warzone"), network_exes=("cod.exe",)),
+    BoostCatalogEntry("counter_strike_2", "Counter-Strike 2", ("CS2", "CS:GO"), network_exes=("cs2.exe",)),
+    BoostCatalogEntry("dota_2", "Dota 2", network_exes=("dota2.exe",)),
+    BoostCatalogEntry("pubg_battlegrounds", "PUBG: BATTLEGROUNDS", ("PUBG",), network_exes=("TslGame.exe",)),
+    BoostCatalogEntry("apex_legends", "Apex Legends", ("Apex",), network_exes=("r5apex.exe", "r5apex_dx12.exe")),
+    BoostCatalogEntry("rust", "Rust", network_exes=("RustClient.exe",)),
+    BoostCatalogEntry("delta_force", "Delta Force", network_exes=("DeltaForceClient-Win64-Shipping.exe",)),
+    BoostCatalogEntry("marvel_rivals", "Marvel Rivals", network_exes=("Marvel-Win64-Shipping.exe",)),
+    BoostCatalogEntry("dead_by_daylight", "Dead by Daylight", ("DBD",), network_exes=("DeadByDaylight-Win64-Shipping.exe",)),
+    BoostCatalogEntry("destiny_2", "Destiny 2", network_exes=("destiny2.exe",)),
+    BoostCatalogEntry("overwatch_2", "Overwatch 2", ("OW2",), network_exes=("Overwatch.exe",)),
+    BoostCatalogEntry("deadlock", "Deadlock", network_exes=("project8.exe",)),
     BoostCatalogEntry("discord", "Discord", is_communication_app=True),
     BoostCatalogEntry("telegram", "Telegram", is_communication_app=True),
     BoostCatalogEntry("test", "Test", is_demo=True),

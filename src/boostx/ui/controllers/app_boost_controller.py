@@ -1,27 +1,34 @@
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from boostx.core.services.boost.boost_service import BoostService
 from boostx.core.services.boost.catalog import BOOST_CATALOG, BoostCatalogEntry
+from boostx.ui.controllers.app_tunnel_controller import AppTunnelController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
-from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
-from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
+from boostx.ui.controllers.tunnel_controller import TunnelController
 
 _RUNNING_POLL_MS = 3000
+# A routed game that has not shown up as a running process this long after
+# its boost was started is taken to have failed to launch.
+_LAUNCH_GRACE_S = 180.0
 
 
 class AppBoostController(QObject):
     """The one place that knows how to start/stop/check any BOOST_CATALOG
     entry, whether it's a regular game (BoostSequenceController.run --
-    a fire-and-forget process launch with no real "stop") or a
-    communication app (Discord/TelegramVpnController, which has a real
-    start()/stop() tunnel session). Shared by the AppTogglesRow tiles on
-    Home and Connection so that branching isn't duplicated between them.
+    optimise, route, launch) or a communication app (AppTunnelController,
+    which only routes and makes sure the app is open). Shared by the
+    AppTogglesRow tiles so that branching isn't duplicated there.
 
-    BoostPage keeps its own existing wiring to these same underlying
-    controller instances for its full-screen boost overlay -- this class
-    only tags their signals with the app_key for the smaller tile UI.
+    BoostPage keeps its own wiring to these same underlying controller
+    instances for its full-screen boost overlay -- this class only tags
+    their signals with the app_key for the smaller tile UI.
+
+    It also ends a game's routing once the game has exited, so the tunnel
+    is not kept up for a program that is no longer there.
     """
 
     step_started = Signal(str, str)  # app_key, step_key
@@ -36,18 +43,18 @@ class AppBoostController(QObject):
         self,
         service: BoostService,
         sequence_controller: BoostSequenceController,
-        discord_vpn_controller: DiscordVpnController,
-        telegram_vpn_controller: TelegramVpnController,
+        communication_controllers: dict[str, AppTunnelController],
+        tunnel_controller: TunnelController,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
         self._sequence_controller = sequence_controller
-        self._communication_controllers = {
-            "discord": discord_vpn_controller,
-            "telegram": telegram_vpn_controller,
-        }
+        self._communication_controllers = dict(communication_controllers)
+        self._tunnel = tunnel_controller
         self._pending_game_key: str | None = None
+        # Routed games: app_key -> (seen running, when routing was noticed).
+        self._routed_games: dict[str, tuple[bool, float]] = {}
 
         self._sequence_controller.step_started.connect(self._on_step_started)
         self._sequence_controller.sequence_failed.connect(self._on_sequence_failed)
@@ -85,18 +92,42 @@ class AppBoostController(QObject):
         self._sequence_controller.run(app_key)
 
     def stop(self, app_key: str) -> None:
-        # Regular games have no real "stop" from our side -- launching one
-        # is a fire-and-forget process spawn, not a session we hold open --
-        # only communication apps have a real tunnel to tear down.
+        # A game itself is never closed from here -- launching one is a
+        # fire-and-forget process spawn. What stops is its routing: from
+        # now on the connections it opens go out directly.
         entry = self.entry_for_key(app_key)
         if entry.is_communication_app:
             self._communication_controllers[app_key].stop()
+        else:
+            self._routed_games.pop(app_key, None)
+            self._tunnel.disable(app_key)
+
+    def is_routed(self, app_key: str) -> bool:
+        return self._tunnel.is_enabled(app_key)
 
     def poll_running_keys_now(self) -> None:
         self._poll_running_keys()
 
     def _poll_running_keys(self) -> None:
-        self.running_keys_changed.emit(self._service.get_running_app_keys())
+        running_keys = self._service.get_running_app_keys()
+        self._release_exited_games(running_keys)
+        self.running_keys_changed.emit(running_keys)
+
+    def _release_exited_games(self, running_keys: set[str]) -> None:
+        now = time.monotonic()
+        for entry in BOOST_CATALOG:
+            key = entry.key
+            if entry.is_communication_app or not self._tunnel.is_enabled(key):
+                self._routed_games.pop(key, None)
+                continue
+            seen_running, since = self._routed_games.get(key, (False, now))
+            if key in running_keys:
+                self._routed_games[key] = (True, since)
+            elif seen_running or now - since > _LAUNCH_GRACE_S:
+                self._routed_games.pop(key, None)
+                self._tunnel.disable(key)
+            else:
+                self._routed_games[key] = (False, since)
 
     def _on_step_started(self, step_key: str) -> None:
         if self._pending_game_key is not None:

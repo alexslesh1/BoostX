@@ -6,6 +6,7 @@ from boostx.ui.components.app_toggles_row import AppTogglesRow
 from boostx.ui.components.connections_table import ConnectionsTable
 from boostx.ui.controllers.app_boost_controller import AppBoostController
 from boostx.ui.controllers.monitor_controller import MonitorController
+from boostx.ui.controllers.tunnel_controller import TunnelController
 from boostx.ui.pages.base_page import BasePage
 
 
@@ -17,8 +18,10 @@ class ConnectionPage(BasePage):
         monitor_controller: MonitorController,
         boost_service: BoostService,
         boost_controller: AppBoostController,
+        tunnel_controller: TunnelController,
         parent: QWidget | None = None,
     ) -> None:
+        self._tunnel_controller = tunnel_controller
         self._monitor_controller = monitor_controller
         self._boost_service = boost_service
         self._boost_controller = boost_controller
@@ -33,7 +36,9 @@ class ConnectionPage(BasePage):
         layout.addWidget(self._toggles_row)
         layout.addSpacing(16)
 
-        self._connections_table = ConnectionsTable(self._boost_service, self._monitor_controller, self)
+        self._connections_table = ConnectionsTable(
+            self._boost_service, self._monitor_controller, self._tunnel_controller, self
+        )
         self._connections_table.boost_requested.connect(self.boost_requested.emit)
         layout.addWidget(self._connections_table, stretch=1)
 

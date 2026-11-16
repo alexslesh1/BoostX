@@ -5,11 +5,17 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from boostx.core.services.boost.catalog import BoostCatalogEntry
+from boostx.core.services.tunnel.models import FlowInfo
 from boostx.ui.components.icon_button import IconButton
 from boostx.ui.components.monogram import render_monogram_pixmap
 
 _ICON_SIZE = QSize(28, 28)
 _NO_DATA = "—"  # em dash: honest placeholder, not a fabricated number
+_DIRECT_TEXT = "Direct"
+_CONNECTING_TEXT = "Connecting…"
+_NOT_ROUTED_DETAIL = "This application is using its normal connection. Start it from Boost to route it through Nexora."
+_NO_CONNECTIONS_DETAIL = "Routed through Nexora. No connections are open right now."
+_MAX_DETAIL_LINES = 8
 
 _COLUMN_STRETCH = (
     ("Application", 3),
@@ -36,11 +42,20 @@ class ConnectionTableHeader(QWidget):
         layout.addSpacing(56)  # reserve space matching the eye + chevron buttons on each row
 
 
+def format_bytes(count: int) -> str:
+    value = float(count)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
 class ConnectionTableRow(QWidget):
-    """One row of the upgraded connections table. Columns we don't have
-    real per-flow telemetry for yet (Game Server / Protocol / Sent /
-    Received) show an em-dash rather than a fabricated number -- only
-    Application, routing, and ping are backed by real data."""
+    """One row of the connections table. Every value comes from the
+    routing engine's own counters for this application; where there is
+    nothing to report (the app is running on its normal connection) the
+    cell shows an em-dash rather than a made-up number."""
 
     expand_toggled = Signal(str, bool)  # app_key, expanded
 
@@ -48,7 +63,6 @@ class ConnectionTableRow(QWidget):
         self,
         entry: BoostCatalogEntry,
         icon_path: Path | None,
-        routed_through_nexora: bool,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -79,15 +93,24 @@ class ConnectionTableRow(QWidget):
         app_column.addWidget(name_label, stretch=1)
         main_layout.addLayout(app_column, stretch=_COLUMN_STRETCH[0][1])
 
-        server_text = "Nexora Network" if routed_through_nexora else _NO_DATA
-        main_layout.addWidget(self._value_label(server_text, main_row), stretch=_COLUMN_STRETCH[1][1])
-        main_layout.addWidget(self._value_label(_NO_DATA, main_row), stretch=_COLUMN_STRETCH[2][1])
-        main_layout.addWidget(self._value_label(_NO_DATA, main_row), stretch=_COLUMN_STRETCH[3][1])
-        main_layout.addWidget(self._value_label(_NO_DATA, main_row), stretch=_COLUMN_STRETCH[4][1])
-        main_layout.addWidget(self._value_label(_NO_DATA, main_row), stretch=_COLUMN_STRETCH[5][1])
-
+        self._server_label = self._value_label(_NO_DATA, main_row)
+        self._game_server_label = self._value_label(_NO_DATA, main_row)
+        self._protocol_label = self._value_label(_NO_DATA, main_row)
+        self._sent_label = self._value_label(_NO_DATA, main_row)
+        self._received_label = self._value_label(_NO_DATA, main_row)
         self._ping_label = self._value_label(_NO_DATA, main_row)
-        main_layout.addWidget(self._ping_label, stretch=_COLUMN_STRETCH[6][1])
+        for index, label in enumerate(
+            (
+                self._server_label,
+                self._game_server_label,
+                self._protocol_label,
+                self._sent_label,
+                self._received_label,
+                self._ping_label,
+            ),
+            start=1,
+        ):
+            main_layout.addWidget(label, stretch=_COLUMN_STRETCH[index][1])
 
         eye_button = IconButton(self._icon_path("eye"), QSize(16, 16), icon_color="#B3B3B3", parent=main_row)
         eye_button.setFixedSize(28, 28)
@@ -102,11 +125,7 @@ class ConnectionTableRow(QWidget):
         main_layout.addWidget(eye_button)
         main_layout.addWidget(self._chevron_button)
 
-        self._detail_panel = QLabel(
-            "Detailed per-connection metrics (protocol, game server, bytes sent/received) "
-            "aren't tracked yet for this app.",
-            self,
-        )
+        self._detail_panel = QLabel(_NOT_ROUTED_DETAIL, self)
         self._detail_panel.setObjectName("ConnectionRowDetail")
         self._detail_panel.setWordWrap(True)
         self._detail_panel.setContentsMargins(52, 0, 12, 10)
@@ -122,6 +141,38 @@ class ConnectionTableRow(QWidget):
 
     def set_ping(self, ping_ms: float | None) -> None:
         self._ping_label.setText(f"{ping_ms:.0f} ms" if ping_ms is not None else _NO_DATA)
+
+    def set_direct(self) -> None:
+        """The app is running but not routed through Nexora."""
+        self._server_label.setText(_DIRECT_TEXT)
+        for label in (self._game_server_label, self._protocol_label, self._sent_label, self._received_label):
+            label.setText(_NO_DATA)
+        self._detail_panel.setText(_NOT_ROUTED_DETAIL)
+
+    def set_routed(self, server_name: str, connected: bool, flows: tuple[FlowInfo, ...]) -> None:
+        self._server_label.setText((server_name or "Nexora Network") if connected else _CONNECTING_TEXT)
+        if not flows:
+            for label in (self._game_server_label, self._protocol_label, self._sent_label, self._received_label):
+                label.setText(_NO_DATA)
+            self._detail_panel.setText(_NO_CONNECTIONS_DETAIL)
+            return
+
+        busiest = max(flows, key=lambda flow: flow.bytes_out + flow.bytes_in)
+        others = len({flow.remote for flow in flows}) - 1
+        self._game_server_label.setText(busiest.remote + (f"  +{others}" if others > 0 else ""))
+        self._protocol_label.setText("/".join(sorted({flow.protocol for flow in flows})))
+        self._sent_label.setText(format_bytes(sum(flow.bytes_out for flow in flows)))
+        self._received_label.setText(format_bytes(sum(flow.bytes_in for flow in flows)))
+
+        ordered = sorted(flows, key=lambda flow: flow.bytes_out + flow.bytes_in, reverse=True)
+        lines = [
+            f"{flow.exe}   {flow.protocol}   {flow.remote}   "
+            f"sent {format_bytes(flow.bytes_out)}   received {format_bytes(flow.bytes_in)}"
+            for flow in ordered[:_MAX_DETAIL_LINES]
+        ]
+        if len(ordered) > _MAX_DETAIL_LINES:
+            lines.append(f"… and {len(ordered) - _MAX_DETAIL_LINES} more")
+        self._detail_panel.setText("\n".join(lines))
 
     def _toggle_expanded(self) -> None:
         self._expanded = not self._expanded

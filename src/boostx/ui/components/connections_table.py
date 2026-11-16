@@ -9,28 +9,28 @@ from boostx.core.services.monitor.system_snapshot import SystemSnapshot
 from boostx.ui.components.card import Card
 from boostx.ui.components.connection_table_row import ConnectionTableHeader, ConnectionTableRow
 from boostx.ui.controllers.monitor_controller import MonitorController
+from boostx.ui.controllers.tunnel_controller import TunnelController
 
 _REFRESH_MS = 3000
-# Only Discord/Telegram are actually routed through our WireGuard tunnel
-# today -- regular games are just launched locally, so it would be
-# dishonest to label them "Nexora Network" too.
-_ROUTED_THROUGH_NEXORA = {"discord", "telegram"}
 
 
 class ConnectionsTable(QWidget):
-    """Extracted from the original DashboardPage (which had this inline)
-    so both the new Home and Connection pages could otherwise share it --
-    Connection is the only page that uses it now, since Home no longer
-    shows a connections table per the restructuring."""
+    """Applications that are running or routed, with live figures from the
+    routing engine for the ones that go through Nexora."""
 
     boost_requested = Signal()
 
     def __init__(
-        self, service: BoostService, monitor_controller: MonitorController, parent: QWidget | None = None
+        self,
+        service: BoostService,
+        monitor_controller: MonitorController,
+        tunnel_controller: TunnelController,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
         self._monitor_controller = monitor_controller
+        self._tunnel = tunnel_controller
         self._icon_index = build_icon_index(AppPaths.game_icons_dir())
         self._last_ping_ms: float | None = None
         self._rows: dict[str, ConnectionTableRow] = {}
@@ -57,6 +57,9 @@ class ConnectionsTable(QWidget):
         outer_layout.addWidget(card)
 
         self._monitor_controller.snapshot_updated.connect(self._on_snapshot)
+        self._tunnel.snapshot_updated.connect(lambda _snapshot: self._update_rows())
+        self._tunnel.app_enabled.connect(lambda _key: self.refresh())
+        self._tunnel.app_disabled.connect(lambda _key: self.refresh())
         self._timer = QTimer(self)
         self._timer.setInterval(_REFRESH_MS)
         self._timer.timeout.connect(self.refresh)
@@ -67,8 +70,15 @@ class ConnectionsTable(QWidget):
         self._timer.stop()
 
     def refresh(self) -> None:
-        running_keys = self._service.get_running_app_keys()
+        shown_keys = self._service.get_running_app_keys() | {
+            entry.key for entry in BOOST_CATALOG if self._tunnel.is_enabled(entry.key)
+        }
+        if shown_keys != set(self._rows):
+            self._rebuild_rows(shown_keys)
+        self._stack.setCurrentIndex(0 if self._rows else 1)
+        self._update_rows()
 
+    def _rebuild_rows(self, shown_keys: set[str]) -> None:
         while self._rows_layout.count():
             item = self._rows_layout.takeAt(0)
             widget = item.widget()
@@ -76,21 +86,26 @@ class ConnectionsTable(QWidget):
                 widget.deleteLater()
         self._rows.clear()
 
-        if not running_keys:
-            self._stack.setCurrentIndex(1)
-            return
-
-        self._stack.setCurrentIndex(0)
         for entry in BOOST_CATALOG:
-            if entry.key not in running_keys:
+            if entry.key not in shown_keys:
                 continue
             icon_path = resolve_icon_path(entry.display_name, self._icon_index)
-            routed = entry.key in _ROUTED_THROUGH_NEXORA
-            row = ConnectionTableRow(entry, icon_path, routed, self._rows_container)
-            row.set_ping(self._last_ping_ms)
+            row = ConnectionTableRow(entry, icon_path, self._rows_container)
             self._rows_layout.addWidget(row)
             self._rows[entry.key] = row
         self._rows_layout.addStretch(1)
+
+    def _update_rows(self) -> None:
+        snapshot = self._tunnel.snapshot
+        for app_key, row in self._rows.items():
+            if self._tunnel.is_enabled(app_key):
+                row.set_routed(snapshot.relay_name, snapshot.connected, snapshot.flows_for(app_key))
+                # For a routed application the figure that matters is the
+                # round trip to the relay it actually goes through.
+                row.set_ping(snapshot.rtt_ms if snapshot.connected else None)
+            else:
+                row.set_direct()
+                row.set_ping(self._last_ping_ms)
 
     def _build_rows_view(self, parent: QWidget) -> QWidget:
         self._rows_container = QWidget(parent)
@@ -143,5 +158,6 @@ class ConnectionsTable(QWidget):
     def _on_snapshot(self, snapshot: SystemSnapshot) -> None:
         if snapshot.ping.reachable and snapshot.ping.latency_ms is not None:
             self._last_ping_ms = snapshot.ping.latency_ms
-            for row in self._rows.values():
-                row.set_ping(self._last_ping_ms)
+            for app_key, row in self._rows.items():
+                if not self._tunnel.is_enabled(app_key):
+                    row.set_ping(self._last_ping_ms)

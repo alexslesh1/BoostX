@@ -5,12 +5,15 @@ from loguru import logger
 from PySide6.QtCore import QObject, QThread, Qt, Signal
 
 from boostx.core.services.boost.boost_service import BoostService
+from boostx.core.services.boost.catalog import BOOST_CATALOG, DEMO_EXECUTABLE_SENTINEL
 from boostx.core.services.optimizer.game_mode import enable_game_mode
 from boostx.core.services.optimizer.memory_cleanup import memory_cleanup
 from boostx.core.services.optimizer.optimizer_result import OptimizerResult
 from boostx.core.services.optimizer.power_plan import set_high_performance_power_plan
 from boostx.core.services.optimizer.temp_cleanup import temp_cleanup
+from boostx.core.services.tunnel.rules import build_rule
 from boostx.ui.controllers.boost_script_worker import BoostScriptWorker
+from boostx.ui.controllers.tunnel_controller import TunnelController
 
 _SCRIPT_FILENAME = "general (ALT11).bat"
 _SCRIPT_TIMEOUT_S = 30.0
@@ -31,14 +34,27 @@ class BoostSequenceController(QObject):
     step_completed = Signal(str, bool)
     sequence_failed = Signal(str)
     sequence_finished = Signal(bool)
+    # Routing through the Nexora network could not be set up; the game is
+    # launched on its normal connection instead. Carries the reason.
+    routing_unavailable = Signal(str)
 
     _run_script_requested = Signal(str, float)
 
-    def __init__(self, service: BoostService, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        service: BoostService,
+        tunnel_controller: TunnelController | None = None,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._service = service
+        self._tunnel = tunnel_controller
         self._busy = False
         self._current_app_key: str | None = None
+        self._awaiting_route = False
+        if self._tunnel is not None:
+            self._tunnel.app_enabled.connect(self._on_route_ready)
+            self._tunnel.app_failed.connect(self._on_route_failed)
 
         self._thread = QThread(self)
         self._worker = BoostScriptWorker()
@@ -108,6 +124,49 @@ class BoostSequenceController(QObject):
         if self._service.get_setting("temp_cleanup_enabled") == "1":
             self._run_optional_step("temp_cleanup", temp_cleanup)
 
+        if not self._start_routing():
+            self._launch()
+
+    def _start_routing(self) -> bool:
+        """Routes the game through the Nexora network before it starts, so
+        even its first connection takes that path. Returns False if there
+        is nothing to wait for."""
+        status = self._service.get_status(self._current_app_key)
+        if (
+            self._tunnel is None
+            or status is None
+            or not status.executable_path
+            or status.executable_path == DEMO_EXECUTABLE_SENTINEL
+        ):
+            return False
+        entry = next(entry for entry in BOOST_CATALOG if entry.key == self._current_app_key)
+        rule = build_rule(
+            entry.key, status.executable_path, install_dir=status.install_dir, extra_exes=entry.network_exes
+        )
+        self.step_started.emit("route")
+        self._awaiting_route = True
+        self._tunnel.enable(entry.key, rule)
+        return True
+
+    def _on_route_ready(self, app_key: str) -> None:
+        if not self._awaiting_route or app_key != self._current_app_key:
+            return
+        self._awaiting_route = False
+        self.step_completed.emit("route", True)
+        self._launch()
+
+    def _on_route_failed(self, app_key: str, message: str) -> None:
+        if not self._awaiting_route or app_key != self._current_app_key:
+            return
+        # Not fatal: the game still gets every local optimisation and
+        # starts on its normal connection. The user is told which.
+        self._awaiting_route = False
+        logger.warning(f"Routing unavailable for {app_key}: {message}")
+        self.step_completed.emit("route", False)
+        self.routing_unavailable.emit(message)
+        self._launch()
+
+    def _launch(self) -> None:
         self.step_started.emit("launch")
         launched = self._service.launch_app(self._current_app_key)
         self.step_completed.emit("launch", launched)
@@ -128,6 +187,7 @@ class BoostSequenceController(QObject):
         self.sequence_finished.emit(False)
 
     def shutdown(self) -> None:
+        self._awaiting_route = False
         self._thread.quit()
         if not self._thread.wait(_THREAD_WAIT_TIMEOUT_MS):
             logger.warning("Boost script worker thread did not stop within timeout")

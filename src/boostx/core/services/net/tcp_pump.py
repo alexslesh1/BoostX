@@ -1,8 +1,6 @@
-"""Shared bidirectional TCP byte relay used by both the SOCKS5 bridge
-(kept as a fallback path) and the WinDivert-based transparent relay that
-replaces it as the primary path. Extracted so the half-close fix and its
-regression tests live in exactly one place rather than being duplicated
-(and potentially re-broken) across two relay implementations.
+"""Bidirectional TCP byte relay used by the SOCKS5 bridge. Kept in its
+own module so the half-close fix and its regression tests live in exactly
+one place.
 
 A clean EOF on one leg only half-closes the corresponding write side of
 the other leg (SHUT_WR), rather than fully closing both sockets — an

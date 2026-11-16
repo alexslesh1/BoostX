@@ -44,11 +44,10 @@ def launch_discord(executable_path: Path, local_socks_port: int) -> bool:
 
 
 def launch_discord_plain(executable_path: Path) -> bool:
-    """Launches Discord with no proxy configuration at all. The
-    WinDivert-based VPN (core/services/interception) redirects Discord's
-    traffic transparently at the packet level, so unlike `launch_discord`
-    above (the SOCKS5-based path), Discord's own process is never given
-    any flag or configuration indicating a proxy exists."""
+    """Launches Discord with no proxy configuration at all. Nexora routes
+    its traffic at the packet level (see core/services/tunnel), so unlike
+    `launch_discord` above (the SOCKS5-based path), Discord's own process
+    is never given any flag or configuration indicating a proxy exists."""
     if os.environ.get(_DISABLE_UPDATER_ENV_VAR) == "1":
         _skip_discord_updater()
     try:
@@ -59,6 +58,14 @@ def launch_discord_plain(executable_path: Path) -> bool:
         return True
     except OSError:
         return False
+
+
+def discord_install_dir(executable_path: Path) -> Path:
+    """Discord keeps each version in its own `app-<version>` folder and
+    its updater one level above; the folder that holds all of them is the
+    one that identifies "Discord's programs"."""
+    parent = executable_path.parent
+    return parent.parent if parent.name.lower().startswith("app-") else parent
 
 
 def _discord_settings_path() -> Path | None:

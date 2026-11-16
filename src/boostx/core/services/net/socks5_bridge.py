@@ -1,15 +1,13 @@
 """A local, unauthenticated SOCKS5 server that relays every connection
 through a pluggable upstream connector.
 
-Discord/Chromium's --proxy-server flag (and, for the local-bridge variant
-used by the VPN feature, Telegram's tg://socks deep link) has no way to
-carry credentials or route selection logic, so we bind a bridge on
-127.0.0.1 that the app connects to with no credentials at all. What
-happens to a connection once it reaches this bridge is entirely up to the
-injected `UpstreamConnector` — today that's either an authenticated SOCKS5
-hop to the shared 3proxy relay (see discord_boost/telegram proxy paths),
-or a direct connect bound to the WireGuard tunnel interface (see
-core/services/vpn) — the bridge itself doesn't know or care which.
+Discord/Chromium's --proxy-server flag has no way to carry credentials or
+route selection logic, so we bind a bridge on 127.0.0.1 that the app
+connects to with no credentials at all. What happens to a connection once
+it reaches this bridge is entirely up to the injected `UpstreamConnector`
+— an authenticated SOCKS5 hop to the shared 3proxy relay (see the
+discord_boost/telegram_boost proxy paths). The bridge itself doesn't know
+or care which.
 """
 from __future__ import annotations
 

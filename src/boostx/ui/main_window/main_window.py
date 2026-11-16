@@ -10,16 +10,21 @@ from boostx.config.paths import AppPaths
 from boostx.core.services.api.session_manager import SessionManager
 from boostx.core.services.boost.boost_repository import BoostRepository
 from boostx.core.services.boost.boost_service import BoostService
+from boostx.core.services.discord_boost.discord_launcher import (
+    discord_install_dir,
+    find_discord_executable,
+    launch_discord_plain,
+)
 from boostx.core.services.monitor.system_monitor_service import SystemMonitorService
-from boostx.core.services.vpn.vpn_coordinator import VpnCoordinator
+from boostx.core.services.telegram_boost.telegram_launcher import find_telegram_executable, launch_telegram
+from boostx.core.services.tunnel.tunnel_service import TunnelService
 from boostx.ui.components.sidebar.sidebar import Sidebar
 from boostx.ui.components.title_bar.title_bar import TitleBar
 from boostx.ui.controllers.app_boost_controller import AppBoostController
+from boostx.ui.controllers.app_tunnel_controller import AppTunnelController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
-from boostx.ui.controllers.component_setup_controller import ComponentSetupController
-from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
 from boostx.ui.controllers.monitor_controller import MonitorController
-from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
+from boostx.ui.controllers.tunnel_controller import TunnelController
 from boostx.ui.main_window.frameless_mixin import FramelessWindowMixin
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.navigation.page_router import PageRouter
@@ -52,19 +57,40 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._monitor_controller = MonitorController(SystemMonitorService(), parent=self)
         self._boost_repository = BoostRepository(AppPaths.data_dir() / "boost.db")
         self._boost_service = BoostService(self._boost_repository)
-        self._boost_sequence_controller = BoostSequenceController(self._boost_service, parent=self)
-        self._vpn_coordinator = VpnCoordinator()
-        self._discord_vpn_controller = DiscordVpnController(
-            self._session_manager, self._vpn_coordinator, parent=self
+        # One tunnel carries every boosted application; the engine behind
+        # it is only started (one administrator prompt) the first time a
+        # boost actually needs it.
+        self._tunnel_controller = TunnelController(
+            TunnelService(self._session_manager.fetch_relay_session), parent=self
         )
-        self._telegram_vpn_controller = TelegramVpnController(
-            self._session_manager, self._vpn_coordinator, parent=self
+        self._boost_sequence_controller = BoostSequenceController(
+            self._boost_service, self._tunnel_controller, parent=self
         )
+        self._communication_controllers = {
+            "discord": AppTunnelController(
+                "discord",
+                "Discord",
+                find_discord_executable,
+                launch_discord_plain,
+                discord_install_dir,
+                self._tunnel_controller,
+                parent=self,
+            ),
+            "telegram": AppTunnelController(
+                "telegram",
+                "Telegram",
+                find_telegram_executable,
+                launch_telegram,
+                lambda executable: executable.parent,
+                self._tunnel_controller,
+                parent=self,
+            ),
+        }
         self._app_boost_controller = AppBoostController(
             self._boost_service,
             self._boost_sequence_controller,
-            self._discord_vpn_controller,
-            self._telegram_vpn_controller,
+            self._communication_controllers,
+            self._tunnel_controller,
             parent=self,
         )
 
@@ -76,13 +102,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._offline_banner.setVisible(self._session_manager.is_offline)
         self._session_manager.offline_changed.connect(self._offline_banner.setVisible)
 
-        self._setup_banner = QLabel("", self)
-        self._setup_banner.setObjectName("OfflineBanner")
-        self._setup_banner.setVisible(False)
-        self._component_setup_controller = ComponentSetupController(parent=self)
-        self._component_setup_controller.progress.connect(self._on_setup_progress)
-        self._component_setup_controller.finished.connect(self._on_setup_finished)
-
         self._sidebar = Sidebar(self)
         self._stack = FadeStackedWidget(self)
         self._router = PageRouter(self._stack)
@@ -92,7 +111,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._connect_signals()
 
         self._monitor_controller.start()
-        self._component_setup_controller.run_if_needed()
 
     def _register_pages(self) -> None:
         boost_page_index = next(item.page_index for item in NAV_ITEMS if item.key == "boost")
@@ -104,20 +122,25 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._boost_page = BoostPage(
             self._boost_service,
             self._boost_sequence_controller,
-            self._discord_vpn_controller,
-            self._telegram_vpn_controller,
+            self._communication_controllers,
+            self._tunnel_controller,
             self._stack,
         )
+        self._boost_page.stop_requested.connect(self._app_boost_controller.stop)
         # Once the user actually starts a boost from the Boost page, jump to
         # Connection so they immediately see its live status there.
         self._boost_sequence_controller.sequence_finished.connect(
             lambda success: self._sidebar.select_page(connection_page_index) if success else None
         )
-        self._discord_vpn_controller.started.connect(lambda: self._sidebar.select_page(connection_page_index))
-        self._telegram_vpn_controller.started.connect(lambda: self._sidebar.select_page(connection_page_index))
+        for controller in self._communication_controllers.values():
+            controller.started.connect(lambda: self._sidebar.select_page(connection_page_index))
 
         self._connection_page = ConnectionPage(
-            self._monitor_controller, self._boost_service, self._app_boost_controller, self._stack
+            self._monitor_controller,
+            self._boost_service,
+            self._app_boost_controller,
+            self._tunnel_controller,
+            self._stack,
         )
         self._connection_page.boost_requested.connect(lambda: self._sidebar.select_page(boost_page_index))
 
@@ -145,7 +168,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
         outer_layout.setSpacing(0)
         outer_layout.addWidget(self._title_bar)
         outer_layout.addWidget(self._offline_banner)
-        outer_layout.addWidget(self._setup_banner)
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -160,13 +182,6 @@ class MainWindow(FramelessWindowMixin, QWidget):
         self._title_bar.maximize_toggle_requested.connect(self._toggle_maximize)
         self._title_bar.close_requested.connect(self.close)
         self._sidebar.page_changed.connect(self._router.navigate_to)
-
-    def _on_setup_progress(self, message: str) -> None:
-        self._setup_banner.setText(message)
-        self._setup_banner.setVisible(True)
-
-    def _on_setup_finished(self, _success: bool) -> None:
-        self._setup_banner.setVisible(False)
 
     def _on_drag_delta(self, delta: QPoint) -> None:
         if not self.isMaximized():
@@ -185,19 +200,17 @@ class MainWindow(FramelessWindowMixin, QWidget):
         # otherwise a still-running timer keeps hitting a closed sqlite3
         # connection on every tick with no way to stop itself.
         #
-        # Each step runs independently (a failure in one, e.g. an already-
-        # torn-down interception handle, must never skip the rest) --
-        # _vpn_coordinator.shutdown() actually tearing down any live
-        # WireGuard tunnel service, and _boost_repository.close(), are the
-        # two steps a stale leftover tunnel/an unclosed DB connection would
-        # come from if either got skipped by an earlier exception.
+        # Each step runs independently: a failure in one must never skip
+        # the rest. In particular the tunnel controller's shutdown is what
+        # stops the routing engine, and _boost_repository.close() is what
+        # releases the database.
         self._safe_shutdown("connection page", self._connection_page.shutdown)
         self._safe_shutdown("app boost controller", self._app_boost_controller.shutdown)
         self._safe_shutdown("monitor controller", self._monitor_controller.shutdown)
         self._safe_shutdown("boost sequence controller", self._boost_sequence_controller.shutdown)
-        self._safe_shutdown("discord VPN controller", self._discord_vpn_controller.shutdown)
-        self._safe_shutdown("telegram VPN controller", self._telegram_vpn_controller.shutdown)
-        self._safe_shutdown("VPN coordinator (tunnel teardown)", self._vpn_coordinator.shutdown)
+        for name, controller in self._communication_controllers.items():
+            self._safe_shutdown(f"{name} routing controller", controller.shutdown)
+        self._safe_shutdown("tunnel controller (stops the routing engine)", self._tunnel_controller.shutdown)
         self._safe_shutdown("cleaner page", self._cleaner_page.shutdown)
         self._safe_shutdown("tweaks page", self._tweaks_page.shutdown)
         self._safe_shutdown("boost repository", self._boost_repository.close)

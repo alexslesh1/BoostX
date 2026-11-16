@@ -1,6 +1,7 @@
 """UpstreamConnector that hops through an authenticated SOCKS5 proxy (the
-shared 3proxy relay) — the original Boost Discord/Telegram transport,
-kept as-is and unaffected by the newer WireGuard-based VPN transport.
+shared 3proxy relay) — the original Boost Discord/Telegram transport.
+Per-application routing through Nexora relays lives in core/services/tunnel
+and does not use this.
 """
 from __future__ import annotations
 

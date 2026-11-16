@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 from boostx.config.palette import Palette
 from boostx.core.services.boost.boost_app_status import BoostAppStatus
-from boostx.core.services.boost.boost_metrics import BoostMetricsProvider
+from boostx.core.services.boost.boost_metrics import BoostMetricsProvider, NetworkSource
 from boostx.core.services.boost.catalog import BoostCatalogEntry
 from boostx.ui.components.boost_active.average_fps_card import AverageFPSCard
 from boostx.ui.components.boost_active.cpu_usage_card import CPUUsageCard
@@ -30,7 +30,9 @@ COVER_SIZE = QSize(168, 299)
 _METRICS_INTERVAL_MS = 1000
 _PREPARING_TEXT = "Preparing Boost..."
 _LAUNCHING_TEXT = "Launching..."
+_ROUTING_TEXT = "Connecting to Nexora Network..."
 _ACTIVE_TEXT = "Boost Active"
+_ACTIVE_UNROUTED_TEXT = "Boost Active — direct connection"
 _STATS_COLUMNS = 2
 
 _SEVERITY_PALETTE_ATTR = {
@@ -113,6 +115,12 @@ class BoostScreen(QWidget):
         status_row.addWidget(self._status_label, alignment=Qt.AlignmentFlag.AlignVCenter)
         status_row.addStretch(1)
 
+        # Shown only when the boost is active without Nexora routing.
+        self._routing_note_label = QLabel("", self)
+        self._routing_note_label.setObjectName("SecondaryPathLabel")
+        self._routing_note_label.setWordWrap(True)
+        self._routing_note_label.setVisible(False)
+
         stop_button = QPushButton("Stop Boost", self)
         stop_button.setObjectName("BoostStopButton")
         stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -141,6 +149,7 @@ class BoostScreen(QWidget):
         right_column.setSpacing(4)
         right_column.addWidget(status_heading)
         right_column.addLayout(status_row)
+        right_column.addWidget(self._routing_note_label)
         right_column.addSpacing(4)
         right_column.addWidget(stop_button, alignment=Qt.AlignmentFlag.AlignLeft)
         right_column.addSpacing(10)
@@ -148,6 +157,11 @@ class BoostScreen(QWidget):
         right_column.addSpacing(10)
         right_column.addLayout(self._stats_grid)
         return right_column
+
+    def set_network_source(self, source: NetworkSource | None) -> None:
+        """Where ping and packet loss come from while the shown
+        application is routed through Nexora."""
+        self._metrics.set_network_source(source)
 
     def start(self, entry: BoostCatalogEntry, status: BoostAppStatus, icon_path: Path | None) -> None:
         self._cover_label.setPixmap(self._load_cover(entry, icon_path))
@@ -159,6 +173,8 @@ class BoostScreen(QWidget):
         self._apply_stats_layout(reduced=entry.is_communication_app)
 
         self._set_status(_PREPARING_TEXT, "neutral", pulsing=True)
+        self._status_label.setToolTip("")
+        self._routing_note_label.setVisible(False)
         self._ping_widget.reset()
         for card in (
             self._packet_loss_card,
@@ -191,7 +207,7 @@ class BoostScreen(QWidget):
         self._timer.stop()
 
     def on_step_started(self, step_key: str) -> None:
-        text = _LAUNCHING_TEXT if step_key == "launch" else _PREPARING_TEXT
+        text = {"launch": _LAUNCHING_TEXT, "route": _ROUTING_TEXT}.get(step_key, _PREPARING_TEXT)
         self._set_status(text, "neutral", pulsing=True)
 
     def show_progress(self, text: str) -> None:
@@ -201,8 +217,16 @@ class BoostScreen(QWidget):
         self._set_status(message or "Boost Failed", "error", pulsing=False)
         self._timer.stop()
 
-    def on_sequence_finished(self, success: bool) -> None:
+    def on_sequence_finished(self, success: bool, routing_note: str = "") -> None:
         if not success:
+            return
+        if routing_note:
+            # The local optimisations are on, but traffic is not going
+            # through Nexora: say so, and why, rather than implying it is.
+            self._set_status(_ACTIVE_UNROUTED_TEXT, "neutral", pulsing=False)
+            self._status_label.setToolTip(routing_note)
+            self._routing_note_label.setText(routing_note)
+            self._routing_note_label.setVisible(True)
             return
         self._set_status(_ACTIVE_TEXT, "success", pulsing=True)
 

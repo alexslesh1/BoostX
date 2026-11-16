@@ -46,6 +46,12 @@ class AppPaths:
         return cls.resources_dir() / "images"
 
     @classmethod
+    def engine_dir(cls) -> Path:
+        """The routing engine and its capture driver (built from
+        nexora-core/; see nexora-core/README.md)."""
+        return cls.resources_dir() / "engine"
+
+    @classmethod
     def scripts_dir(cls) -> Path:
         return cls.resources_dir() / "scripts"
 

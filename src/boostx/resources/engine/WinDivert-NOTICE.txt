@@ -1,0 +1,10 @@
+WinDivert 2.2.2 - Windows Packet Divert
+Copyright (c) basil00. https://github.com/basil00/WinDivert
+
+WinDivert64.dll and WinDivert64.sys are unmodified binaries, redistributed
+under the GNU Lesser General Public License version 3 (or, at your option,
+the GNU General Public License version 2). The licence texts are in this
+folder; the corresponding source code is at the address above.
+
+Nexora loads WinDivert.dll dynamically and does not modify it. You may
+replace these two files with your own build of the same version.

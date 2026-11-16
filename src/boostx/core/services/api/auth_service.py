@@ -9,6 +9,7 @@ from boostx.core.services.api.models import (
     SubscriptionInfo,
     UserProfile,
 )
+from boostx.core.services.tunnel.models import RelayServer, RelaySession
 
 
 class AuthService:
@@ -126,8 +127,24 @@ class AuthService:
             host=body["host"], port=body["port"], login=body["login"], password=body["password"]
         )
 
-    def get_vpn_config(self, access_token: str) -> str:
-        return self._client.request_text("GET", "/vpn/config", token=access_token)
+    def get_relay_session(self, access_token: str, device_id: str) -> RelaySession:
+        body = self._client.request(
+            "POST", "/relay/session", json={"device_id": device_id}, token=access_token
+        )
+        return RelaySession(
+            token=body["token"],
+            expires_at=int(body["expires_at"]),
+            servers=tuple(
+                RelayServer(
+                    id=item["id"],
+                    name=item["name"],
+                    region=item.get("region", ""),
+                    address=item["address"],
+                    public_key=item["public_key"],
+                )
+                for item in body["servers"]
+            ),
+        )
 
     def check_health(self) -> bool:
         try:

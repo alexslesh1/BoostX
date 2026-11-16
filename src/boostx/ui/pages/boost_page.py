@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
@@ -23,9 +23,9 @@ from boostx.core.services.discord_boost.discord_launcher import find_discord_exe
 from boostx.core.services.telegram_boost.telegram_launcher import find_telegram_executable
 from boostx.ui.components.boost_app_card import SLOT_SIZE, BoostAppCard
 from boostx.ui.components.boost_screen import BoostScreen
+from boostx.ui.controllers.app_tunnel_controller import AppTunnelController
 from boostx.ui.controllers.boost_sequence_controller import BoostSequenceController
-from boostx.ui.controllers.discord_vpn_controller import DiscordVpnController
-from boostx.ui.controllers.telegram_vpn_controller import TelegramVpnController
+from boostx.ui.controllers.tunnel_controller import TunnelController
 from boostx.ui.navigation.fade_stacked_widget import FadeStackedWidget
 from boostx.ui.pages.base_page import BasePage
 
@@ -34,21 +34,22 @@ _SEARCH_FIELD_HEIGHT = 36
 
 
 class BoostPage(BasePage):
+    # The user pressed Stop on a game's boost screen: end its routing.
+    stop_requested = Signal(str)  # app_key
+
     def __init__(
         self,
         service: BoostService,
         sequence_controller: BoostSequenceController,
-        discord_vpn_controller: DiscordVpnController,
-        telegram_vpn_controller: TelegramVpnController,
+        communication_controllers: dict[str, AppTunnelController],
+        tunnel_controller: TunnelController,
         parent: QWidget | None = None,
     ) -> None:
         # Must be assigned before super().__init__(), since it triggers _build_body() synchronously.
         self._service = service
+        self._tunnel = tunnel_controller
         self._sequence_controller = sequence_controller
-        self._communication_controllers = {
-            "discord": discord_vpn_controller,
-            "telegram": telegram_vpn_controller,
-        }
+        self._communication_controllers = dict(communication_controllers)
         self._communication_finders = {
             "discord": find_discord_executable,
             "telegram": find_telegram_executable,
@@ -57,6 +58,7 @@ class BoostPage(BasePage):
         self._slots: dict[str, QWidget] = {}
         self._current_app_key: str | None = None
         self._last_failure_message = ""
+        self._routing_note = ""
         self._icon_index: dict[str, Path] = {}
         self._catalog_index = {entry.key: index for index, entry in enumerate(BOOST_CATALOG)}
 
@@ -69,6 +71,7 @@ class BoostPage(BasePage):
         self._sequence_controller.step_started.connect(self._on_step_started)
         self._sequence_controller.sequence_failed.connect(self._on_sequence_failed)
         self._sequence_controller.sequence_finished.connect(self._on_sequence_finished)
+        self._sequence_controller.routing_unavailable.connect(self._on_routing_unavailable)
 
         for controller in self._communication_controllers.values():
             controller.started.connect(self._on_communication_started)
@@ -123,6 +126,7 @@ class BoostPage(BasePage):
         content_layout.addWidget(scroll_area)
 
         self._boost_screen = BoostScreen(self)
+        self._boost_screen.set_network_source(self._routed_network_metrics)
         self._boost_screen.back_requested.connect(self._on_back_requested)
         self._boost_screen.stop_requested.connect(self._on_stop_requested)
 
@@ -172,6 +176,7 @@ class BoostPage(BasePage):
         if status is not None and status.installed and status.executable_path:
             self._current_app_key = app_key
             self._last_failure_message = ""
+            self._routing_note = ""
             icon_path = resolve_icon_path(entry.display_name, self._icon_index)
             self._boost_screen.start(entry, status, icon_path)
             self._stack.setCurrentIndex(1)
@@ -253,8 +258,24 @@ class BoostPage(BasePage):
         self._last_failure_message = message
         self._boost_screen.on_sequence_failed(message)
 
+    def _routed_network_metrics(self) -> tuple[float, float] | None:
+        """Round trip and loss to the relay, while the application on the
+        boost screen is actually going through it."""
+        snapshot = self._tunnel.snapshot
+        if (
+            not self._current_app_key
+            or not self._tunnel.is_enabled(self._current_app_key)
+            or not snapshot.connected
+            or snapshot.rtt_ms is None
+        ):
+            return None
+        return snapshot.rtt_ms, snapshot.loss_percent or 0.0
+
+    def _on_routing_unavailable(self, message: str) -> None:
+        self._routing_note = message
+
     def _on_sequence_finished(self, success: bool) -> None:
-        self._boost_screen.on_sequence_finished(success)
+        self._boost_screen.on_sequence_finished(success, routing_note=self._routing_note)
         if self._current_app_key:
             self._cards[self._current_app_key].update_status(self._service.get_status(self._current_app_key))
 
@@ -266,6 +287,8 @@ class BoostPage(BasePage):
         controller = self._communication_controllers.get(self._current_app_key or "")
         if controller is not None:
             controller.stop()
+        elif self._current_app_key:
+            self.stop_requested.emit(self._current_app_key)
         self._boost_screen.stop()
         self._stack.setCurrentIndex(0)
         self._refresh_cards()
