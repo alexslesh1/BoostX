@@ -69,6 +69,27 @@ function TcpResult() {
     } finally { $tcp.Close() }
 }
 
+# Small requests plus one 10 MB download from a program that is not routed
+# (curl.exe), so the engine's effect on everyone else's traffic shows up
+# as failures or as time, compared with the same run without the engine.
+function Measure-Web($label) {
+    $urls = @("https://api.github.com/zen", "https://www.microsoft.com/", "https://www.cloudflare.com/cdn-cgi/trace") * 2
+    $failed = 0; $slowest = 0.0
+    foreach ($u in $urls) {
+        $out = & curl.exe -s -o NUL -m 20 -w "%{http_code} %{time_total}" $u
+        $code, $time = "$out".Split(" ")
+        if ($code -notmatch "^[23]") { $failed++; Write-Host "      ${label}: $u -> $out" }
+        $slowest = [Math]::Max($slowest, [double]$time)
+    }
+    $start = Get-Date
+    & curl.exe -s -o NUL -m 60 "https://speed.cloudflare.com/__down?bytes=10000000"
+    if ($LASTEXITCODE -ne 0) { $failed++; Write-Host "      ${label}: 10 MB download failed ($LASTEXITCODE)" }
+    $bulk = ((Get-Date) - $start).TotalSeconds
+    [pscustomobject]@{ Count = $urls.Count + 1; Failed = $failed; Slowest = $slowest; Bulk = $bulk }
+}
+
+$baseline = Measure-Web "without the engine"
+
 try {
     $deadline = (Get-Date).AddSeconds(20)
     while (-not ((Test-Path $session) -and (Test-Path $keyFile))) {
@@ -106,8 +127,15 @@ try {
     $tcp = TcpResult
     if ($tcp -eq "refused") { Pass "TCP connect of $myExe went through the tunnel (refused by the test relay)" } else { Fail "TCP connect of ${myExe}: $tcp" }
 
-    $curlCode = & curl.exe -s -o NUL -m 20 -w "%{http_code}" https://www.microsoft.com/
-    if ($curlCode -match "^[23]") { Pass "other programs still reach the internet normally while capturing (curl: $curlCode)" } else { Fail "curl.exe failed while capturing (code $curlCode)" }
+    $during = Measure-Web "while capturing"
+    if ($during.Failed -eq 0) {
+        Pass ("other programs reach the internet normally while capturing: {0} requests ok, slowest {1:N2} s, 10 MB in {2:N1} s (without the engine: slowest {3:N2} s, 10 MB in {4:N1} s)" -f $during.Count, $during.Slowest, $during.Bulk, $baseline.Slowest, $baseline.Bulk)
+    } else {
+        Fail ("other programs' requests failed while capturing: {0} of {1} (without the engine: {2} of {3})" -f $during.Failed, $during.Count, $baseline.Failed, $baseline.Count)
+    }
+    if ($during.Bulk -gt 3 * [Math]::Max($baseline.Bulk, 1)) {
+        Write-Host ("WARN  10 MB download is much slower while capturing: {0:N1} s vs {1:N1} s" -f $during.Bulk, $baseline.Bulk) -ForegroundColor Yellow
+    }
 
     & curl.exe -s -o NUL --connect-timeout 4 http://1.2.3.4:5555/ ; $curlExit = $LASTEXITCODE
     if ($curlExit -eq 28) { Pass "curl.exe (not selected) was not routed: its connection timed out" } else { Fail "curl.exe (not selected) got exit $curlExit instead of a timeout" }
