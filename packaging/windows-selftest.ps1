@@ -104,7 +104,7 @@ try {
     if ($echo -like "echo:hello from 1.2.3.4:5555") { Pass "UDP of $myExe went through the tunnel and back ($echo)" } else { Fail "UDP of $myExe got no echo ($echo)" }
 
     $tcp = TcpResult
-    if ($tcp -eq "refused") { Pass "TCP connect of $myExe went through the tunnel (refused by the test relay)" } else { Fail "TCP connect of $myExe: $tcp" }
+    if ($tcp -eq "refused") { Pass "TCP connect of $myExe went through the tunnel (refused by the test relay)" } else { Fail "TCP connect of ${myExe}: $tcp" }
 
     $curlCode = & curl.exe -s -o NUL -m 20 -w "%{http_code}" https://www.microsoft.com/
     if ($curlCode -match "^[23]") { Pass "other programs still reach the internet normally while capturing (curl: $curlCode)" } else { Fail "curl.exe failed while capturing (code $curlCode)" }
