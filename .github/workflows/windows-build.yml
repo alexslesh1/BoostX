@@ -56,6 +56,18 @@ jobs:
       - name: Engine self-test on real Windows
         run: ./packaging/windows-selftest.ps1 -Dir "$PWD/selftest"
 
+      # Informational: whether the test server answers from the internet.
+      # The build goes on either way.
+      - name: Check the test server from outside
+        continue-on-error: true
+        run: |
+          $api = $env:NEXORA_BUILD_API_URL
+          $relayHost = ([uri]$api).Host
+          Write-Host "backend health ($api/health):"
+          & curl.exe -sS -m 10 -w "  -> HTTP %{http_code} in %{time_total} s`n" "$api/health"
+          Write-Host "relay $relayHost`:4700 (UDP probe):"
+          & ./selftest/nexora-engine.exe probe "$relayHost`:4700"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
