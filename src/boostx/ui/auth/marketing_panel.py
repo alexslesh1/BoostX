@@ -38,6 +38,10 @@ class MarketingPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("MarketingPanel")
+        # A plain QWidget subclass ignores its QSS background unless this is
+        # set -- without it the panel stays unpainted (white) and all of its
+        # white text is invisible.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self._switcher = LanguageSwitcher(self)
 

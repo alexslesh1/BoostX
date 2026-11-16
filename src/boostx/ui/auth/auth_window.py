@@ -34,6 +34,10 @@ class AuthWindow(FramelessWindowMixin, QWidget):
 
         self._title_bar = TitleBar("Nexora", self)
         self._marketing_panel = MarketingPanel(self)
+        if self._background_label is not None:
+            # A real background image sits behind everything; let it show
+            # through instead of the panel's QSS gradient fallback.
+            self._marketing_panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self._auth_stack = AuthStack(session_manager, self)
         self._auth_stack.setFixedWidth(_AUTH_STACK_WIDTH)
         self._auth_stack.authenticated.connect(self.authenticated.emit)

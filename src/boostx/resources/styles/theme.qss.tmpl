@@ -449,8 +449,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 
 QWidget#AuthWindowRoot {
-    background: qradialgradient(cx:0.12, cy:0.08, radius:1.15, fx:0.12, fy:0.08,
-        stop:0 rgba(90, 110, 165, 0.40), stop:0.35 rgba(45, 48, 60, 0.18), stop:1 ${BACKGROUND});
+    background-color: ${BACKGROUND};
     border-radius: ${WINDOW_RADIUS}px;
 }
 
@@ -463,7 +462,8 @@ QWidget#AuthPage {
 }
 
 QWidget#MarketingPanel {
-    background: transparent;
+    background: qradialgradient(cx:0.12, cy:0.08, radius:1.15, fx:0.12, fy:0.08,
+        stop:0 #2E364C, stop:0.35 #161618, stop:1 ${BACKGROUND});
 }
 
 QWidget#MarketingFeatureRow {
@@ -499,6 +499,7 @@ QFrame#MarketingDivider {
 
 QComboBox#LanguageSwitcher {
     background: transparent;
+    min-width: 110px;
     border: 1px solid ${BORDER};
     border-radius: ${RADIUS_SMALL}px;
     padding: 6px 10px;
