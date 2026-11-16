@@ -23,7 +23,7 @@ env:
   # The backend the test build talks to. Override per run (input above) or
   # for the repository (Settings → Variables → NEXORA_API_URL). A file
   # api_url.txt next to Nexora.exe overrides it on a given PC.
-  NEXORA_BUILD_API_URL: ${{ github.event.inputs.api_url || vars.NEXORA_API_URL || 'http://194.87.200.215:8000/api/v1' }}
+  NEXORA_BUILD_API_URL: ${{ github.event.inputs.api_url || vars.NEXORA_API_URL || 'http://82.139.231.54:8000/api/v1' }}
 
 jobs:
   build:
