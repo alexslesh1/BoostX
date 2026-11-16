@@ -42,9 +42,60 @@ type Controller struct {
 	factory Factory
 	key     string
 
+	// OnShutdown, if set, is called when a client asks the whole engine
+	// process to exit. Logf, if set, receives one line per notable event.
+	OnShutdown func()
+	Logf       func(format string, args ...any)
+
 	mu      sync.Mutex
 	engine  *Engine
 	lastErr string
+}
+
+// ErrNotRunning is returned when a live update is sent to a stopped engine.
+var ErrNotRunning = errors.New("engine is not running")
+
+func (c *Controller) logf(format string, args ...any) {
+	if c.Logf != nil {
+		c.Logf(format, args...)
+	}
+}
+
+func ruleNames(rules []Rule) []string {
+	names := make([]string, len(rules))
+	for i, rule := range rules {
+		names[i] = rule.Name
+	}
+	return names
+}
+
+// SetRules changes which programs are routed without restarting the engine,
+// so the connections of programs that stay selected are not disturbed.
+func (c *Controller) SetRules(rules []Rule) error {
+	c.mu.Lock()
+	eng := c.engine
+	c.mu.Unlock()
+	if eng == nil {
+		return ErrNotRunning
+	}
+	eng.SetRules(rules)
+	c.logf("rules updated: %v", ruleNames(rules))
+	return nil
+}
+
+// SetToken hands the running tunnel a fresh session token.
+func (c *Controller) SetToken(token string) error {
+	if token == "" {
+		return errors.New("token is required")
+	}
+	c.mu.Lock()
+	eng := c.engine
+	c.mu.Unlock()
+	if eng == nil {
+		return ErrNotRunning
+	}
+	eng.SetToken(token)
+	return nil
 }
 
 // NewController requires every request to carry key in X-Nexora-Key. A web
@@ -66,10 +117,12 @@ func (c *Controller) Start(cfg StartConfig) error {
 	eng, err := c.factory(cfg)
 	if err != nil {
 		c.lastErr = err.Error()
+		c.logf("start failed (relay %s): %v", cfg.Relay, err)
 		return err
 	}
 	c.engine = eng
 	c.lastErr = ""
+	c.logf("started: relay %s, rules %v", cfg.Relay, ruleNames(cfg.Rules))
 	go func() {
 		err := eng.Run()
 		c.mu.Lock()
@@ -78,6 +131,7 @@ func (c *Controller) Start(cfg StartConfig) error {
 			c.engine = nil
 			if err != nil {
 				c.lastErr = err.Error()
+				c.logf("engine stopped on its own: %v", err)
 			}
 		}
 	}()
@@ -91,6 +145,7 @@ func (c *Controller) Stop() {
 	c.mu.Unlock()
 	if eng != nil {
 		eng.Close()
+		c.logf("stopped")
 	}
 }
 
@@ -126,8 +181,11 @@ func writeError(w http.ResponseWriter, code int, message string) {
 //
 //	GET  /v1/status
 //	POST /v1/start   StartConfig
+//	POST /v1/rules    {"rules": [Rule, ...]}   change routed programs, no restart
+//	POST /v1/token    {"token": "..."}         fresh session token
 //	POST /v1/stop
-//	POST /v1/probe   {"relays": ["host:port", ...]}
+//	POST /v1/probe    {"relays": ["host:port", ...]}
+//	POST /v1/shutdown                          stop and exit the process
 func (c *Controller) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +210,42 @@ func (c *Controller) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/stop", func(w http.ResponseWriter, r *http.Request) {
 		c.Stop()
 		writeJSON(w, http.StatusOK, c.status())
+	})
+	mux.HandleFunc("POST /v1/rules", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Rules []Rule `json:"rules"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if err := c.SetRules(request.Rules); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, c.status())
+	})
+	mux.HandleFunc("POST /v1/token", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&request); err != nil || request.Token == "" {
+			writeError(w, http.StatusBadRequest, "body must be {\"token\": \"...\"}")
+			return
+		}
+		if err := c.SetToken(request.Token); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, c.status())
+	})
+	mux.HandleFunc("POST /v1/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		c.Stop()
+		writeJSON(w, http.StatusOK, c.status())
+		if c.OnShutdown != nil {
+			// After the response is on its way: the caller is waiting for it.
+			go c.OnShutdown()
+		}
 	})
 	mux.HandleFunc("POST /v1/probe", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {

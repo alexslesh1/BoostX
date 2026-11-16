@@ -219,3 +219,27 @@ func TestToken(t *testing.T) {
 		t.Fatalf("format err = %v", err)
 	}
 }
+
+// The backend is written in Python and signs tokens with its own code. This
+// is a token it produced (BoostX-Server tests pin the same string), so a
+// format change on either side fails a test on that side.
+func TestTokenFromBackendVerifies(t *testing.T) {
+	secret := make([]byte, 32)
+	for i := range secret {
+		secret[i] = byte(i)
+	}
+	const signed = "eyJ1aWQiOiIxMTExMTExMS0yMjIyLTMzMzMtNDQ0NC01NTU1NTU1NTU1NTUiLCJkZXYiOiJkZXZpY2UtMSIsImV4cCI6NDEwMjQ0NDgwMH0" +
+		".WULqx2cKjNC_Z75fRrCvSkJgo0J2iNRUWKR27huKZkA"
+
+	token, err := VerifyToken(secret, []byte(signed), time.Unix(1_800_000_000, 0))
+	if err != nil {
+		t.Fatalf("backend-signed token rejected: %v", err)
+	}
+	want := Token{UserID: "11111111-2222-3333-4444-555555555555", Device: "device-1", Expires: 4_102_444_800}
+	if token != want {
+		t.Fatalf("claims = %+v, want %+v", token, want)
+	}
+	if _, err := VerifyToken(secret, []byte(signed), time.Unix(4_102_444_800, 0)); err != ErrTokenExpired {
+		t.Fatalf("at its expiry time: %v, want expired", err)
+	}
+}

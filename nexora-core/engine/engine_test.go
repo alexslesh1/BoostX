@@ -511,3 +511,176 @@ func newRigWithoutRun(t *testing.T) *rig {
 	t.Cleanup(r.engine.Close)
 	return r
 }
+
+func TestRulesChangedWhileRunningOnlyAffectNewConnections(t *testing.T) {
+	r := newRig(t, true)
+	r.resolver.set(50000, 100, gameExe)
+	r.resolver.set(50005, 200, browserExe)
+
+	r.send(udp(50000, "game"))
+	r.expectTunneled("game packet")
+	browserOld := udp(50005, "browser before the change")
+	r.send(browserOld)
+	r.expectDirect("browser packet before it was selected", browserOld)
+
+	// The user switches boost off for the game and on for the browser.
+	r.engine.SetRules([]Rule{{Name: "Browser", Exes: []string{"browser.exe"}}})
+
+	r.send(udp(50000, "game, same connection"))
+	r.expectTunneled("the game's connection that was already tunneled")
+	r.send(browserOld)
+	r.expectDirect("the browser's connection that was already direct", browserOld)
+
+	r.resolver.set(50001, 100, gameExe)
+	gameNew := udp(50001, "game, new connection")
+	r.send(gameNew)
+	r.expectDirect("a new connection of the deselected game", gameNew)
+
+	r.resolver.set(50006, 200, browserExe)
+	r.send(udp(50006, "browser, new connection"))
+	r.expectTunneled("a new connection of the newly selected browser")
+
+	apps := map[string]bool{}
+	for _, f := range r.engine.Status().Flows {
+		apps[f.App] = true
+	}
+	if !apps["Shooter"] || !apps["Browser"] {
+		t.Fatalf("status should list tunneled connections of both programs: %v", apps)
+	}
+}
+
+func TestFreshTokenReconnectsRefusedTunnelAtOnce(t *testing.T) {
+	key, _ := proto.GenerateKey()
+	secret := []byte("0123456789abcdef")
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tun := &fakeTUN{written: make(chan []byte, 1), closed: make(chan struct{})}
+	server, err := relay.New(conn, tun, relay.Options{StaticKey: key, TokenSecret: secret, Pool: netip.MustParsePrefix("10.66.0.0/24")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go server.Serve()
+	defer server.Close()
+
+	expired, _ := proto.SignToken(secret, proto.Token{UserID: "u", Device: "d", Expires: time.Now().Add(-time.Minute).Unix()})
+	tunnel, err := NewTunnel(conn.LocalAddr().String(), base64.StdEncoding.EncodeToString(key.PublicKey().Bytes()), string(expired))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tunnel.Start()
+	defer tunnel.Close()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for tunnel.Status().Error == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("an expired token was not reported")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if tunnel.Status().Connected {
+		t.Fatal("connected with an expired token")
+	}
+
+	// Let the tunnel settle into its long wait between refused attempts.
+	time.Sleep(helloRetry + 200*time.Millisecond)
+
+	fresh, _ := proto.SignToken(secret, proto.Token{UserID: "u", Device: "d", Expires: time.Now().Add(time.Hour).Unix()})
+	tunnel.SetToken(string(fresh))
+	// Far sooner than the 30 s a refused tunnel otherwise waits.
+	deadline = time.Now().Add(3 * time.Second)
+	for !tunnel.Status().Connected {
+		if time.Now().After(deadline) {
+			t.Fatalf("did not reconnect with the fresh token: %+v", tunnel.Status())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if status := tunnel.Status(); status.Error != "" {
+		t.Fatalf("stale error after reconnecting: %+v", status)
+	}
+}
+
+func TestControlAPILiveUpdatesAndShutdown(t *testing.T) {
+	var current *rig
+	controller := NewController(func(StartConfig) (*Engine, error) {
+		current = newRigWithoutRun(t)
+		return current.engine, nil
+	}, "k")
+	var logged []string
+	var logMu sync.Mutex
+	controller.Logf = func(format string, args ...any) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		logged = append(logged, format)
+	}
+	shutdownCalled := make(chan struct{})
+	controller.OnShutdown = func() { close(shutdownCalled) }
+	server := httptest.NewServer(controller.Handler())
+	defer server.Close()
+	defer controller.Stop()
+
+	post := func(path, body string) int {
+		t.Helper()
+		req, _ := http.NewRequest("POST", server.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Nexora-Key", "k")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	rules := `{"rules":[{"name":"Browser","exes":["browser.exe"]}]}`
+	if code := post("/v1/rules", rules); code != http.StatusConflict {
+		t.Fatalf("rules while stopped: %d", code)
+	}
+	if code := post("/v1/token", `{"token":"t2"}`); code != http.StatusConflict {
+		t.Fatalf("token while stopped: %d", code)
+	}
+	if code := post("/v1/start", `{"relay":"203.0.113.1:4700","relay_public_key":"k","token":"t","rules":[{"name":"G","exes":["g.exe"]}]}`); code != 200 {
+		t.Fatalf("start: %d", code)
+	}
+	if current.engine.rules.match(`C:\x\browser.exe`) != "" {
+		t.Fatal("browser selected before the update")
+	}
+	if code := post("/v1/rules", rules); code != 200 {
+		t.Fatalf("rules: %d", code)
+	}
+	if current.engine.rules.match(`C:\x\browser.exe`) != "Browser" || current.engine.rules.match(`C:\x\g.exe`) != "" {
+		t.Fatal("rules were not replaced on the running engine")
+	}
+	if code := post("/v1/rules", `nope`); code != http.StatusBadRequest {
+		t.Fatalf("bad rules body: %d", code)
+	}
+	if code := post("/v1/token", `{"token":""}`); code != http.StatusBadRequest {
+		t.Fatalf("empty token: %d", code)
+	}
+	if code := post("/v1/token", `{"token":"t2"}`); code != 200 {
+		t.Fatalf("token: %d", code)
+	}
+	current.engine.tunnel.mu.Lock()
+	token := string(current.engine.tunnel.token)
+	current.engine.tunnel.mu.Unlock()
+	if token != "t2" {
+		t.Fatalf("token on the running tunnel = %q", token)
+	}
+
+	if code := post("/v1/shutdown", ""); code != 200 {
+		t.Fatalf("shutdown: %d", code)
+	}
+	select {
+	case <-shutdownCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown did not ask the process to exit")
+	}
+	if !current.engine.closed.Load() {
+		t.Fatal("shutdown left the engine running")
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	if len(logged) < 3 {
+		t.Fatalf("expected start, rules and stop to be logged, got %v", logged)
+	}
+}

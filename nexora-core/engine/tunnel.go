@@ -35,7 +35,6 @@ type Tunnel struct {
 	conn     *net.UDPConn
 	relay    netip.AddrPort
 	relayKey *ecdh.PublicKey
-	token    []byte
 	onPacket func(inner []byte)
 	now      func() time.Time
 	// How often to ping, and how long without a pong means the relay is gone.
@@ -45,6 +44,7 @@ type Tunnel struct {
 	session atomic.Pointer[liveSession]
 
 	mu        sync.Mutex
+	token     []byte
 	pending   *proto.ClientHandshake
 	lastError string
 	rejected  bool
@@ -138,8 +138,25 @@ func (t *Tunnel) Send(inner []byte) {
 	}
 }
 
+// SetToken replaces the session token used for the next handshake. Tokens
+// expire, so a long-lived tunnel is handed a fresh one from time to time;
+// a tunnel that was refused for an expired token retries at once.
+func (t *Tunnel) SetToken(token string) {
+	t.mu.Lock()
+	t.token = []byte(token)
+	t.rejected = false
+	t.mu.Unlock()
+	select {
+	case t.established <- struct{}{}:
+	default:
+	}
+}
+
 func (t *Tunnel) sendHello() {
-	hs, hello, err := proto.NewClientHello(t.relayKey, t.token)
+	t.mu.Lock()
+	token := t.token
+	t.mu.Unlock()
+	hs, hello, err := proto.NewClientHello(t.relayKey, token)
 	if err != nil {
 		return
 	}

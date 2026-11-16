@@ -5,8 +5,9 @@
 //
 //	nexora-engine connect -relay HOST:PORT -pubkey KEY -token TOKEN -exe game.exe [-dir "C:\Games\X"]
 //	    route the named programs through the relay and print status (for testing)
-//	nexora-engine serve -key-file PATH [-listen 127.0.0.1:47600]
-//	    run the local control API for the desktop app
+//	nexora-engine serve -key-file PATH [-listen 127.0.0.1:47600] [-parent-pid PID] [-log PATH]
+//	    run the local control API for the desktop app; with -parent-pid the
+//	    engine exits as soon as that process does
 //	nexora-engine probe HOST:PORT [HOST:PORT ...]
 //	    measure round-trip time to relays
 package main
@@ -17,6 +18,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -24,6 +26,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -145,6 +148,8 @@ func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	listen := fs.String("listen", "127.0.0.1:47600", "address for the control API (loopback only)")
 	keyFile := fs.String("key-file", "", "file to write the API key to (created if missing)")
+	parentPID := fs.Uint("parent-pid", 0, "exit when this process exits (the desktop app)")
+	logPath := fs.String("log", "", "append a log of engine events to this file")
 	fs.Parse(args)
 	if *keyFile == "" {
 		return errors.New("-key-file is required")
@@ -164,22 +169,64 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	if *logPath != "" {
+		file, err := os.OpenFile(*logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		logger.SetOutput(file)
+	}
+
 	controller := engine.NewController(build, key)
+	controller.Logf = logger.Printf
 	defer controller.Stop()
 
 	server := &http.Server{Addr: *listen, Handler: controller.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	var once sync.Once
+	shutdown := func(reason string) {
+		once.Do(func() {
+			logger.Printf("exiting: %s", reason)
+			controller.Stop()
+			server.Close()
+		})
+	}
+	controller.OnShutdown = func() { shutdown("requested by the app") }
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	go func() {
 		<-stop
-		controller.Stop()
-		server.Close()
+		shutdown("interrupted")
 	}()
-	fmt.Printf("control API on http://%s (key in %s)\n", *listen, *keyFile)
+	if *parentPID != 0 {
+		// The engine holds every outbound packet on the machine while it
+		// runs, so it must never outlive the app that started it — not even
+		// when that app crashes or is killed from Task Manager.
+		go func() {
+			waitForProcessExit(uint32(*parentPID))
+			shutdown("the app that started the engine has exited")
+		}()
+	}
+
+	logger.Printf("control API on http://%s", *listen)
 	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		logger.Printf("control API failed: %v", err)
 		return err
 	}
 	return nil
+}
+
+// waitForProcessExit returns when the process is gone, including when it
+// cannot be opened at all (it has already exited).
+func waitForProcessExit(pid uint32) {
+	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	if err != nil {
+		return
+	}
+	defer windows.CloseHandle(handle)
+	windows.WaitForSingleObject(handle, windows.INFINITE)
 }
 
 func loadOrCreateKey(path string) (string, error) {

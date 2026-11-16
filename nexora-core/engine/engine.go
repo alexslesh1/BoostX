@@ -188,6 +188,20 @@ func New(capture Capture, resolver Resolver, tunnel *Tunnel, rules []Rule) *Engi
 	return e
 }
 
+// SetRules replaces the set of routed programs while the engine runs.
+// Connections that already exist keep the path they started on: removing a
+// program lets its tunneled connections finish through the relay, and
+// adding one affects only the connections it opens from now on.
+func (e *Engine) SetRules(rules []Rule) {
+	set := newRuleSet(rules)
+	e.mu.Lock()
+	e.rules = set
+	e.mu.Unlock()
+}
+
+// SetToken supplies a fresh session token for the tunnel's next handshake.
+func (e *Engine) SetToken(token string) { e.tunnel.SetToken(token) }
+
 // Run captures until Close. It returns the capture error that ended it.
 func (e *Engine) Run() error {
 	e.tunnel.Start()
