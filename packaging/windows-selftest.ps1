@@ -144,3 +144,5 @@ finally {
 
 if ($failures -gt 0) { Write-Host "`n$failures check(s) failed" -ForegroundColor Red; exit 1 }
 Write-Host "`nAll checks passed" -ForegroundColor Green
+# curl's expected non-zero exits above must not become this script's result.
+exit 0
