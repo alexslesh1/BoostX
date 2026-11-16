@@ -1,0 +1,17 @@
+[Unit]
+Description=Nexora relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/nexora-relay run -config /etc/nexora/relay.json
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+# Needs root for the TUN device and the NAT rules it adds and removes itself.
+User=root
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
